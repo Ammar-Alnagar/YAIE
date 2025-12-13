@@ -1,7 +1,8 @@
+import traceback
+from typing import Any, Dict, List, Optional
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
-import traceback
 
 from ..engine import InferenceEngine
 
@@ -45,7 +46,7 @@ def create_app(model_name: str) -> FastAPI:
     Returns:
         FastAPI application instance
     """
-    app = FastAPI(title="Mini-YAIE API", version="0.1.0")
+    app = FastAPI(title="YAIE API", version="0.1.0")
 
     # Load model when the server starts
     engine = InferenceEngine(model_name)
@@ -60,7 +61,9 @@ def create_app(model_name: str) -> FastAPI:
             # 3. Format the response in OpenAI-compatible format
             # 4. Handle streaming if requested
 
-            raise NotImplementedError("Chat completions endpoint not yet implemented - this is an exercise for the learner")
+            raise NotImplementedError(
+                "Chat completions endpoint not yet implemented - this is an exercise for the learner"
+            )
 
         except Exception as e:
             traceback.print_exc()
@@ -71,13 +74,7 @@ def create_app(model_name: str) -> FastAPI:
         # Return the loaded model information
         return {
             "object": "list",
-            "data": [
-                {
-                    "id": model_name,
-                    "object": "model",
-                    "owned_by": "user"
-                }
-            ]
+            "data": [{"id": model_name, "object": "model", "owned_by": "user"}],
         }
 
     return app

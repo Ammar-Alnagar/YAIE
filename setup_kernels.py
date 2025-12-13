@@ -1,5 +1,5 @@
 """
-Setup script for building custom CUDA kernels for Mini-YAIE
+Setup script for building custom CUDA kernels for YAIE
 This script handles compilation of custom attention and other kernels
 """
 
@@ -83,7 +83,7 @@ def build_extensions():
 
 
 if __name__ == "__main__":
-    print("Building Mini-YAIE CUDA kernels...")
+    print("Building YAIE CUDA kernels...")
 
     # Create directories if they don't exist
     os.makedirs("src/kernels/cuda", exist_ok=True)

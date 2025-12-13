@@ -1,1 +1,1 @@
-"""Core module for Mini-YAIE engine"""
+"""Core module for YAIE engine"""

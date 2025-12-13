@@ -1,1 +1,1 @@
-"""CLI module for Mini-YAIE"""
+"""CLI module for YAIE"""

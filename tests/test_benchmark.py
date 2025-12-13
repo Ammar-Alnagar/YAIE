@@ -1,5 +1,5 @@
 """
-Benchmark tests for Mini-YAIE inference engine
+Benchmark tests for YAIE inference engine
 Tests performance with a locally downloaded model and records results
 """
 

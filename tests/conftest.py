@@ -1,5 +1,5 @@
 """
-Pytest configuration for Mini-YAIE tests
+Pytest configuration for YAIE tests
 """
 
 import os

@@ -1,5 +1,5 @@
 """
-Kernels package for Mini-YAIE
+Kernels package for YAIE
 Contains all the low-level implementations that need to be filled in
 """
 

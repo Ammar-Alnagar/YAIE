@@ -1,1 +1,1 @@
-"""Models module for Mini-YAIE"""
+"""Models module for YAIE"""

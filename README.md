@@ -1,6 +1,6 @@
-# Mini-YAIE: Educational LLM Inference Engine
+# YAIE: Educational LLM Inference Engine
 
-Mini-YAIE (Yet Another Inference Engine) is an educational project designed to help students and developers understand how modern LLM inference engines work. This implementation is inspired by state-of-the-art systems like SGLang, vLLM, FlashInfer and other efficient inference engines, focusing on continuous batching, radial attention, and FlashInfer-style optimizations.
+YAIE (Yet Another Inference Engine) is an educational project designed to help students and developers understand how modern LLM inference engines work. This implementation is inspired by state-of-the-art systems like SGLang, vLLM, FlashInfer and other efficient inference engines, focusing on continuous batching, radial attention, and FlashInfer-style optimizations.
 
 ## Table of Contents
 - [Overview](#overview)
@@ -16,7 +16,7 @@ Mini-YAIE (Yet Another Inference Engine) is an educational project designed to h
 
 ## Overview
 
-Modern LLM inference engines like SGLang, vLLM, and TensorRT-LLM implement sophisticated techniques to maximize throughput and minimize latency. Mini-YAIE demonstrates these concepts through a simplified but educational implementation that focuses on:
+Modern LLM inference engines like SGLang, vLLM, and TensorRT-LLM implement sophisticated techniques to maximize throughput and minimize latency. YAIE demonstrates these concepts through a simplified but educational implementation that focuses on:
 
 - **Continuous Batching**: Dynamically batching incoming requests to maximize GPU utilization
 - **Radial Attention**: Efficient attention mechanism with prefix sharing and paged KV-cache
@@ -67,8 +67,8 @@ The engine follows a modular architecture:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/Mini-YAIE.git
-   cd Mini-YAIE
+   git clone https://github.com/yourusername/YAIE.git
+   cd YAIE
    ```
 
 2. Create a virtual environment (recommended):

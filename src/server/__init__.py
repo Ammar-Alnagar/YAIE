@@ -1,1 +1,1 @@
-"""Server module for Mini-YAIE API"""
+"""Server module for YAIE API"""

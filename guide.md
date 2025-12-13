@@ -1,6 +1,6 @@
-# Mini-YAIE Kernels Implementation Guide
+# YAIE Kernels Implementation Guide
 
-This document outlines all the kernels that need to be implemented in the Mini-YAIE inference engine. Each section describes what the kernel does, why it's important, and implementation guidance.
+This document outlines all the kernels that need to be implemented in the YAIE inference engine. Each section describes what the kernel does, why it's important, and implementation guidance.
 
 ## 1. Attention Kernels
 

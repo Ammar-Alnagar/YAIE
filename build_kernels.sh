@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Build script for Mini-YAIE custom kernels
+# Build script for YAIE custom kernels
 set -e  # Exit on any error
 
-echo "Building Mini-YAIE custom kernels..."
+echo "Building YAIE custom kernels..."
 
 # Check if CUDA is available
 if ! command -v nvcc &> /dev/null; then
