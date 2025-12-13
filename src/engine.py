@@ -10,17 +10,10 @@ from typing import Any, Dict, List, Optional
 import torch
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
-try:
-    from core.sglang_scheduler import SGLangScheduler
-    from kernels.kv_cache import KVCacheManager
-    from kernels.radix_attention import RadixAttentionWithPagedKVCache
-    from models.loader import ModelLoader
-except ImportError:
-    # Fallback to relative imports for development
-    from .core.sglang_scheduler import SGLangScheduler
-    from .kernels.kv_cache import KVCacheManager
-    from .kernels.radix_attention import RadixAttentionWithPagedKVCache
-    from .models.loader import ModelLoader
+from core.sglang_scheduler import SGLangScheduler
+from kernels.kv_cache import KVCacheManager
+from kernels.radix_attention import RadixAttentionWithPagedKVCache
+from models.loader import ModelLoader
 
 
 class InferenceEngine:

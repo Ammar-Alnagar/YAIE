@@ -1,7 +1,4 @@
-try:
-    from engine import InferenceEngine
-except ImportError:
-    from src.engine import InferenceEngine
+from engine import InferenceEngine
 from transformers import AutoTokenizer
 import sys
 

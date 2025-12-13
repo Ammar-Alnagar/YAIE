@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from ..engine import InferenceEngine
+from engine import InferenceEngine
 
 
 class ChatMessage(BaseModel):
