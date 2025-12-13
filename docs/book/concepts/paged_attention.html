@@ -7,6 +7,25 @@
 
 
         <!-- Custom HTML head -->
+        <!-- Custom Head with Mermaid Support -->
+        <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({ startOnLoad: false });
+        
+            document.addEventListener('DOMContentLoaded', async () => {
+                const elements = document.querySelectorAll('code.language-mermaid');
+                for (const element of elements) {
+                    const pre = element.parentElement;
+                    const div = document.createElement('div');
+                    div.classList.add('mermaid');
+                    div.textContent = element.textContent;
+                    pre.replaceWith(div);
+                }
+                await mermaid.run({
+                    querySelector: '.mermaid'
+                });
+            });
+        </script>
 
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -144,7 +163,7 @@
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/yourusername/YAIE" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/ammar-alnagar/Mini-YAIE" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -193,6 +212,35 @@
 <li><strong>Non-Contiguous</strong>: Blocks can be stored anywhere in physical GPU memory.</li>
 <li><strong>Mapping</strong>: A "Block Table" maps logical token positions to physical block addresses.</li>
 </ol>
+<pre><code class="language-mermaid">graph LR
+    subgraph Logical["Logical Sequence (Request)"]
+        L0[Block 0: "Hello"]
+        L1[Block 1: "World"]
+        L2[Block 2: "!"]
+    end
+
+    subgraph Table["Page Table"]
+        T0[0 -&gt; 7]
+        T1[1 -&gt; 2]
+        T2[2 -&gt; 9]
+    end
+
+    subgraph Physical["GPU Memory (Physical Blocks)"]
+        B0[Block 0]
+        B1[Block 1]
+        B2[Block 2: "World"]:::used
+        B3...
+        B7[Block 7: "Hello"]:::used
+        B8...
+        B9[Block 9: "!"]:::used
+    end
+
+    L0 --&gt; T0 --&gt; B7
+    L1 --&gt; T1 --&gt; B2
+    L2 --&gt; T2 --&gt; B9
+
+    classDef used fill:#aaffaa;
+</code></pre>
 <h2 id="the-kernel"><a class="header" href="#the-kernel">The Kernel</a></h2>
 <p>The Paged Attention kernel allows the Attention mechanism to read keys and values from these non-contiguous blocks on the fly, enabling near-zero memory waste.</p>
 

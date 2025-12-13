@@ -7,6 +7,25 @@
 
 
         <!-- Custom HTML head -->
+        <!-- Custom Head with Mermaid Support -->
+        <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({ startOnLoad: false });
+        
+            document.addEventListener('DOMContentLoaded', async () => {
+                const elements = document.querySelectorAll('code.language-mermaid');
+                for (const element of elements) {
+                    const pre = element.parentElement;
+                    const div = document.createElement('div');
+                    div.classList.add('mermaid');
+                    div.textContent = element.textContent;
+                    pre.replaceWith(div);
+                }
+                await mermaid.run({
+                    querySelector: '.mermaid'
+                });
+            });
+        </script>
 
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -144,7 +163,7 @@
                         <a href="../../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/yourusername/YAIE" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/ammar-alnagar/Mini-YAIE" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -179,28 +198,64 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="sampling-kernelssamplingpy"><a class="header" href="#sampling-kernelssamplingpy">Sampling (<code>kernels/sampling.py</code>)</a></h1>
-<h2 id="concept"><a class="header" href="#concept">Concept</a></h2>
-<p>Convert the model's raw output logits (probabilities) into a single token ID.</p>
-<h2 id="implementation-goal"><a class="header" href="#implementation-goal">Implementation Goal</a></h2>
-<p>Implement <code>SamplingKernel.sample</code>:</p>
-<h3 id="1-temperature"><a class="header" href="#1-temperature">1. Temperature</a></h3>
+<h2 id="1-concept-from-logits-to-tokens"><a class="header" href="#1-concept-from-logits-to-tokens">1. Concept: From Logits to Tokens</a></h2>
+<p>The model outputs <strong>logits</strong>: a vector of size <code>[VOCAB_SIZE]</code> (e.g., 50,000) containing raw scores for the next token.
+We need to pick <strong>one</strong> token ID.</p>
 <ul>
-<li><code>logits = logits / temperature</code></li>
-<li>Higher temp = flatter distribution (more random).</li>
-<li>Lower temp = sharper distribution (more deterministic).</li>
+<li><strong>Greedy</strong>: Just pick <code>argmax()</code>. Boring, repetitive.</li>
+<li><strong>Sampling</strong>: Pick randomly based on probability. Creative!</li>
 </ul>
-<h3 id="2-top-p-nucleus"><a class="header" href="#2-top-p-nucleus">2. Top-P (Nucleus)</a></h3>
+<p>We control the randomness with <strong>Temperature</strong>, <strong>Top-P</strong> (Nucleus), and <strong>Top-K</strong>.</p>
+<hr />
+<h2 id="2-implementation-guide"><a class="header" href="#2-implementation-guide">2. Implementation Guide</a></h2>
+<p>Open <code>src/kernels/sampling.py</code>.</p>
+<h3 id="step-1-temperature-scaling"><a class="header" href="#step-1-temperature-scaling">Step 1: Temperature Scaling</a></h3>
+<p><strong>Temperature</strong> ($T$) controls confidence.</p>
 <ul>
-<li>Sort probabilities descending.</li>
-<li>Compute cumulative sum.</li>
-<li>Cut off where sum &gt; <code>top_p</code>.</li>
-<li>Renormalize remaining probabilities.</li>
+<li>$T &lt; 1$: Makes peakier (more confident).</li>
+<li>$T &gt; 1$: Makes flatter (more random).</li>
 </ul>
-<h3 id="3-selection"><a class="header" href="#3-selection">3. Selection</a></h3>
+<p><strong>Algorithm</strong>:</p>
+<pre><code class="language-python">logits = logits / temperature
+</code></pre>
 <ul>
-<li><code>torch.multinomial(probs, 1)</code></li>
-<li>Return the selected token ID.</li>
+<li><strong>Watch out</strong>: If $T$ is very close to 0, just do <code>argmax</code> to avoid division by zero!</li>
 </ul>
+<hr />
+<h3 id="step-2-softmax"><a class="header" href="#step-2-softmax">Step 2: Softmax</a></h3>
+<p>Convert logits to probabilities (0.0 to 1.0).</p>
+<pre><code class="language-python">probs = torch.softmax(logits, dim=-1)
+</code></pre>
+<hr />
+<h3 id="step-3-top-k-filtering"><a class="header" href="#step-3-top-k-filtering">Step 3: Top-K Filtering</a></h3>
+<p>Keep only the $K$ most likely tokens. Zero out the rest.</p>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li>Find the value of the $K$-th highest score.</li>
+<li>Mask (set to $-\infty$) anything below that value in <code>logits</code> (or 0 in <code>probs</code>).</li>
+<li>Re-normalize probabilities.</li>
+</ol>
+<hr />
+<h3 id="step-4-top-p-nucleus-filtering-the-tricky-one"><a class="header" href="#step-4-top-p-nucleus-filtering-the-tricky-one">Step 4: Top-P (Nucleus) Filtering (The Tricky One)</a></h3>
+<p>Keep the smallest set of tokens whose cumulative probability adds up to $P$ (e.g., 0.9). This dynamically truncates the long tail of "nonsense" words.</p>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li>Sort probabilities in descending order: <code>sorted_probs, sorted_indices = torch.sort(probs, descending=True)</code>.</li>
+<li>Compute cumulative sum: <code>cumulative_probs = torch.cumsum(sorted_probs, dim=-1)</code>.</li>
+<li>Find cut-off: Mask where <code>cumulative_probs &gt; top_p</code>.
+<ul>
+<li><em>Tip</em>: You want to include the <em>first</em> token that crosses the threshold. So shift the mask right by one.</li>
+</ul>
+</li>
+<li>Scatter the mask back to the original ordering.</li>
+<li>Re-normalize.</li>
+</ol>
+<hr />
+<h3 id="step-5-the-final-selection"><a class="header" href="#step-5-the-final-selection">Step 5: The Final Selection</a></h3>
+<p>Once you have your clean probability distribution:</p>
+<pre><code class="language-python">next_token = torch.multinomial(probs, num_samples=1)
+</code></pre>
+<p><strong>Your Turn</strong>: Implement <code>sample</code> in <code>SamplingKernel</code>. Start simple (just Temperature) and verify, then add Top-P.</p>
 
                     </main>
 

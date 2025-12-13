@@ -7,6 +7,25 @@
 
 
         <!-- Custom HTML head -->
+        <!-- Custom Head with Mermaid Support -->
+        <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({ startOnLoad: false });
+        
+            document.addEventListener('DOMContentLoaded', async () => {
+                const elements = document.querySelectorAll('code.language-mermaid');
+                for (const element of elements) {
+                    const pre = element.parentElement;
+                    const div = document.createElement('div');
+                    div.classList.add('mermaid');
+                    div.textContent = element.textContent;
+                    pre.replaceWith(div);
+                }
+                await mermaid.run({
+                    querySelector: '.mermaid'
+                });
+            });
+        </script>
 
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -144,7 +163,7 @@
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/yourusername/YAIE" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/ammar-alnagar/Mini-YAIE" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -193,6 +212,15 @@ prefix_hash = sha256(prompt)
 <li><strong>Prioritize Decode</strong>: To minimize latency, we always try to run pending decode steps first.</li>
 <li><strong>Fill with Prefill</strong>: If there is leftover GPU memory (or batch size capacity), we pull new requests from the queue for prefill.</li>
 </ol>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; Pending
+    Pending --&gt; RunningPrefill : schedule_step()
+    RunningPrefill --&gt; ScheduledDecode : process_prefill()
+    ScheduledDecode --&gt; RunningDecode : schedule_step()
+    RunningDecode --&gt; ScheduledDecode : Not Finished
+    RunningDecode --&gt; Completed : Finished
+    Completed --&gt; [*]
+</code></pre>
 <h2 id="state-machine"><a class="header" href="#state-machine">State Machine</a></h2>
 <p>Requests transition through states:
 <code>PENDING</code> -&gt; <code>RUNNING_PREFILL</code> -&gt; <code>SCHEDULED_DECODE</code> -&gt; <code>RUNNING_DECODE</code> -&gt; <code>COMPLETED</code></p>

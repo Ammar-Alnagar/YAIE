@@ -7,6 +7,25 @@
 
 
         <!-- Custom HTML head -->
+        <!-- Custom Head with Mermaid Support -->
+        <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({ startOnLoad: false });
+        
+            document.addEventListener('DOMContentLoaded', async () => {
+                const elements = document.querySelectorAll('code.language-mermaid');
+                for (const element of elements) {
+                    const pre = element.parentElement;
+                    const div = document.createElement('div');
+                    div.classList.add('mermaid');
+                    div.textContent = element.textContent;
+                    pre.replaceWith(div);
+                }
+                await mermaid.run({
+                    querySelector: '.mermaid'
+                });
+            });
+        </script>
 
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -144,7 +163,7 @@
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/yourusername/YAIE" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/ammar-alnagar/Mini-YAIE" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -187,6 +206,29 @@
 <li><strong>Output</strong>: The KV (Key-Value) cache for the prompt and the first generated token.</li>
 <li><strong>Characteristic</strong>: Compute-bound. We maximize parallelism here.</li>
 </ul>
+<h2 id="the-process-visualized"><a class="header" href="#the-process-visualized">The Process Visualized</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant U as User
+    participant E as Engine
+    participant M as Model
+
+    rect rgb(200, 220, 255)
+    note right of U: Prefill Phase (Parallel)
+    U-&gt;&gt;E: Prompt: "A B C"
+    E-&gt;&gt;M: Forward(["A", "B", "C"])
+    M--&gt;&gt;E: KV Cache + Logits(C)
+    end
+
+    rect rgb(220, 255, 200)
+    note right of U: Decode Phase (Serial)
+    loop Until EOS
+        E-&gt;&gt;M: Forward([Last Token])
+        M--&gt;&gt;E: Update KV + Logits
+        E-&gt;&gt;E: Sample Next Token
+    end
+    end
+    E-&gt;&gt;U: Response
+</code></pre>
 <h2 id="2-decode-phase-the-generation"><a class="header" href="#2-decode-phase-the-generation">2. Decode Phase (The "Generation")</a></h2>
 <ul>
 <li><strong>Input</strong>: The previously generated token.</li>

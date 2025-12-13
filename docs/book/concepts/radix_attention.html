@@ -7,6 +7,25 @@
 
 
         <!-- Custom HTML head -->
+        <!-- Custom Head with Mermaid Support -->
+        <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({ startOnLoad: false });
+        
+            document.addEventListener('DOMContentLoaded', async () => {
+                const elements = document.querySelectorAll('code.language-mermaid');
+                for (const element of elements) {
+                    const pre = element.parentElement;
+                    const div = document.createElement('div');
+                    div.classList.add('mermaid');
+                    div.textContent = element.textContent;
+                    pre.replaceWith(div);
+                }
+                await mermaid.run({
+                    querySelector: '.mermaid'
+                });
+            });
+        </script>
 
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -144,7 +163,7 @@
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/yourusername/YAIE" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/ammar-alnagar/Mini-YAIE" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -187,6 +206,16 @@
 <li>"Write a Python script to <strong>sort a list</strong>."</li>
 </ol>
 <p>They share the prefix "Write a Python script to ". In a standard engine, we would compute the KV cache for this prefix twice.</p>
+<pre><code class="language-mermaid">graph TD
+    classDef shared fill:#aaffaa,stroke:#333,stroke-width:2px;
+    classDef unique fill:#ffaaaa,stroke:#333,stroke-width:2px;
+
+    Root((Root)) --&gt; Node1["Write a Python script to"]:::shared
+    Node1 --&gt; Node2["scrape a website"]:::unique
+    Node1 --&gt; Node3["sort a list"]:::unique
+
+    style Node1 fill:#aaffaa
+</code></pre>
 <h2 id="the-radix-tree"><a class="header" href="#the-radix-tree">The Radix Tree</a></h2>
 <p>SGLang maintains a <strong>Radix Tree</strong> (Trie) of all token sequences currently in the KV cache.</p>
 <ul>

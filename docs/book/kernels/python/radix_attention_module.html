@@ -7,6 +7,25 @@
 
 
         <!-- Custom HTML head -->
+        <!-- Custom Head with Mermaid Support -->
+        <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({ startOnLoad: false });
+        
+            document.addEventListener('DOMContentLoaded', async () => {
+                const elements = document.querySelectorAll('code.language-mermaid');
+                for (const element of elements) {
+                    const pre = element.parentElement;
+                    const div = document.createElement('div');
+                    div.classList.add('mermaid');
+                    div.textContent = element.textContent;
+                    pre.replaceWith(div);
+                }
+                await mermaid.run({
+                    querySelector: '.mermaid'
+                });
+            });
+        </script>
 
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -144,7 +163,7 @@
                         <a href="../../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/yourusername/YAIE" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/ammar-alnagar/Mini-YAIE" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -178,7 +197,83 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="radix-attention-module"><a class="header" href="#radix-attention-module">Radix Attention Module</a></h1>
+                        <h1 id="radix-attention-module-kernelsradix_attentionpy"><a class="header" href="#radix-attention-module-kernelsradix_attentionpy">Radix Attention Module (<code>kernels/radix_attention.py</code>)</a></h1>
+<h2 id="1-concept-connecting-the-dots"><a class="header" href="#1-concept-connecting-the-dots">1. Concept: Connecting the Dots</a></h2>
+<p>We have a <strong>Radix Tree</strong> (prefix matching) and a <strong>Paged KV Cache</strong> (memory management). The <code>RadixAttentionWithPagedKVCache</code> class is the glue that runs on the CPU (Python side) to manage these resources before we launch the GPU kernels.</p>
+<p>It doesn't run the attention <em>math</em> (that's the CUDA kernel's job). Instead, it manages the <strong>metadata</strong>:</p>
+<ul>
+<li>"Request A needs to append 'cat' to its sequence."</li>
+<li>"Does 'cat' already exist in the Radix Tree?"</li>
+<li>"If yes, reuse the block."</li>
+<li>"If no, allocate a new block."</li>
+</ul>
+<hr />
+<h2 id="2-implementation-guide"><a class="header" href="#2-implementation-guide">2. Implementation Guide</a></h2>
+<p>Open <code>src/kernels/radix_attention.py</code>.</p>
+<h3 id="step-1-initialization"><a class="header" href="#step-1-initialization">Step 1: Initialization</a></h3>
+<p>You need to initialize the two sub-components we built earlier.</p>
+<pre><code class="language-python">class RadixAttentionWithPagedKVCache:
+    def __init__(self, ...):
+        # ...
+        self.radix_tree = RadixTree()
+        self.kv_cache_manager = KVCacheManager(...)
+</code></pre>
+<h3 id="step-2-append_slot-the-critical-logic"><a class="header" href="#step-2-append_slot-the-critical-logic">Step 2: <code>append_slot</code> (The Critical Logic)</a></h3>
+<p>This method is called when we want to add a new token (or tokens) to a request.</p>
+<p><strong>Signature</strong>:</p>
+<pre><code class="language-python">def append_slot(self, key: torch.Tensor, value: torch.Tensor, request_id: str):
+</code></pre>
+<ul>
+<li><code>key</code>/<code>value</code>: The computed K/V tensors for the <em>new</em> token(s).</li>
+</ul>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li><strong>Check Tree</strong>: Use <code>self.radix_tree</code> to see if this <code>(request_id + new_token)</code> path already exists?
+<ul>
+<li><em>Note</em>: In a real system, we check <em>before</em> computing K/V. Here, we might just be managing the cache storage.</li>
+</ul>
+</li>
+<li><strong>Allocate</strong>: If we need new space, call <code>self.kv_cache_manager.allocate_blocks()</code>.</li>
+<li><strong>Store</strong>: We need to perform the copy.
+<ul>
+<li>Ideally, we just return the <em>indices</em> of where to write, and the GPU kernel does the writing.</li>
+<li>For this Python simulation, you might simulate the copy or just track the metadata.</li>
+</ul>
+</li>
+</ol>
+<h3 id="step-3-get_kv_cache"><a class="header" href="#step-3-get_kv_cache">Step 3: <code>get_kv_cache</code></a></h3>
+<p>The scheduler asks: "I am about to run requests <code>[R1, R2]</code>. Where is their data?"</p>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li>Loop through <code>request_ids</code>.</li>
+<li>For each, ask <code>self.kv_cache_manager</code> for its block table (list of integers).</li>
+<li>Pack these lists into a single Tensor <code>block_tables</code>.</li>
+<li>Return <code>block_tables</code> to the Engine.</li>
+</ol>
+<h3 id="step-4-free_request"><a class="header" href="#step-4-free_request">Step 4: <code>free_request</code></a></h3>
+<p>When a request is done:</p>
+<ol>
+<li><code>self.radix_tree.remove_request(request_id)</code> (Decrement ref counts).</li>
+<li><code>self.kv_cache_manager.free_blocks(request_id)</code> (Reclaim memory).</li>
+</ol>
+<hr />
+<h2 id="3-the-radixattentionblock-model-layer"><a class="header" href="#3-the-radixattentionblock-model-layer">3. The <code>RadixAttentionBlock</code> (Model Layer)</a></h2>
+<p>The class <code>RadixAttentionBlock</code> is the PyTorch module that sits in the model.</p>
+<p><strong>Task</strong>:
+In <code>forward()</code>:</p>
+<ol>
+<li>Compute Q, K, V projections.</li>
+<li>Compute RoPE (Rotary Embeddings).</li>
+<li><strong>If Prefill</strong>: Use Flash Attention (or a standard attention) on the new tokens.</li>
+<li><strong>If Decode</strong>:
+<ul>
+<li>Call <code>append_slot</code> to save the new K/V.</li>
+<li>Call <code>paged_attention_kernel</code> (the CUDA op) to attend to the <em>entire</em> history using the block tables.</li>
+</ul>
+</li>
+</ol>
+<p><strong>Exercise</strong>:
+Since we don't have the full model weight loading for this specific block, focus on the <strong>logic flow</strong> in the comments.</p>
 
                     </main>
 
