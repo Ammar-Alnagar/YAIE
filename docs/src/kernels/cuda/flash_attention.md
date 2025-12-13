@@ -6,28 +6,27 @@ The main bottleneck in Attention is reading the huge $N \times N$ matrix from me
 **Flash Attention** breaks the problem into small "tiles" that fit into the GPU's fast **SRAM** (Shared Memory). We compute everything for that tile without going back to slow Global Memory.
 
 ```mermaid
-block-beta
-    columns 3
-    block:GlobalMemory
-        columns 1
+graph TB
+    subgraph GlobalMemory [Global Memory (HBM)]
         Q[Matrix Q]
         K[Matrix K]
         V[Matrix V]
     end
 
-    space
-
-    block:SRAM
-        columns 1
+    subgraph SRAM [Shared Memory (SRAM)]
         TileQ[Tile Q]
         TileK[Tile K]
         TileV[Tile V]
-        Comp(("Compute"))
+        Comp(("Compute QK^T * V"))
     end
 
     Q --> TileQ
     K --> TileK
     V --> TileV
+
+    TileQ --> Comp
+    TileK --> Comp
+    TileV --> Comp
 ```
 
 ---
