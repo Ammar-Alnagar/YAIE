@@ -1,7 +1,7 @@
 [book]
 authors = ["Mini-YAIE Team"]
 language = "en"
-multilingual = false
+
 src = "src"
 title = "Mini-YAIE: Educational LLM Inference Engine"
 
