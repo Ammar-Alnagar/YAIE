@@ -208,3 +208,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Inspired by SGLang, vLLM, and other efficient inference engines
 - Built on top of HuggingFace Transformers library
 - Educational reference implementation for learning purposes
+
+We would like to acknowledge the significant contributions of several state-of-the-art inference engines that inspired this educational project:
+
+- **vLLM**: For pioneering the concept of PagedAttention and efficient memory management in LLM serving
+- **SGLang**: For introducing radial attention and highly optimized prompt processing techniques
+- **TensorRT-LLM**: For demonstrating the power of optimized inference through NVIDIA's TensorRT technology
+- **LightLLM**: For showing how to implement efficient inference with various optimization techniques
+
+These projects have advanced the field of LLM inference significantly, and this educational engine draws concepts and inspiration from their innovative approaches to continuous batching, attention optimization, and memory management.
