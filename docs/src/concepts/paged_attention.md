@@ -9,7 +9,7 @@ Before vLLM, engines allocated contiguous memory for the maximum possible length
 - **Internal Fragmentation**: If a request was shorter than max length, memory was wasted.
 - **External Fragmentation**: We couldn't fit a new request even if total free memory was sufficient, because no single contiguous block was large enough.
 
-## The Solution: Pagiing
+## The Solution: Paging
 
 Inspired by virtual memory in OS:
 

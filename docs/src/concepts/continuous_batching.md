@@ -12,30 +12,30 @@ In traditional deep learning (like training), we use static batches: all sequenc
 ```mermaid
 gantt
     title Static Batching (Inefficient)
-    dateFormat S
+    dateFormat X
     axisFormat %s
 
     section Batch 1
-    Req A (Short) :done, a1, 0, 2s
-    Padding       :crit, 2s, 4s
-    Req B (Long)  :active, b1, 0, 4s
+    Req A (Short) :done, a1, 0, 2
+    Padding       :crit, 2, 4
+    Req B (Long)  :active, b1, 0, 4
 
     section Batch 2
-    Req C :c1, 4, 6s
+    Req C :c1, 4, 6
 ```
 
 ```mermaid
 gantt
     title Continuous Batching (Efficient)
-    dateFormat S
+    dateFormat X
     axisFormat %s
 
     section GPU Stream
-    Req A (Short) :done, a1, 0, 2s
-    Req C (New!)  :active, c1, 2, 4s
+    Req A (Short) :done, a1, 0, 2
+    Req C (New!)  :active, c1, 2, 4
 
     section GPU Stream 2
-    Req B (Long)  :active, b1, 0, 4s
+    Req B (Long)  :active, b1, 0, 4
 ```
 
 ## The Solution: Continuous Batching (Orca)
