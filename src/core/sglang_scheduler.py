@@ -12,6 +12,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    from kernels.sampling import SamplingKernel
+except ImportError:
+    from src.kernels.sampling import SamplingKernel
+
+
 
 class RequestStatus(Enum):
     PENDING = "pending"
@@ -85,6 +91,7 @@ class SGLangScheduler:
         )  # Group requests by prefix
         self.request_lookup: Dict[str, Request] = {}  # Fast request lookup
         self.memory_manager = None  # Will be connected to KV cache manager
+        self.sampling_kernel = SamplingKernel()
 
     def add_request(
         self,
@@ -261,17 +268,31 @@ class SGLangScheduler:
             # 1. Run model decode kernel
             # 2. Sample token
             
+            # In a real implementation we would get logits from the model
+            # Here we just use dummy logits for the placeholder kernel
+            import torch
+            dummy_logits = torch.randn(1, 1000) # [batch=1, vocab=1000]
+            
+            try:
+                # Use the sampling kernel (which might raise NotImplementedError)
+                next_token_tensor = self.sampling_kernel.sample(
+                    dummy_logits, 
+                    temperature=req.temperature,
+                    top_p=req.top_p
+                )
+                next_token = next_token_tensor.item()
+            except NotImplementedError:
+                # Fallback for when kernel is not implemented yet (student exercise)
+                next_token = 1 # dummy token ID
+            
             # Increment position
             req.current_position += 1
             
-            # Add a dummy token (since we don't have the real model running yet)
-            # In a real impl, this comes from the model sampling
+            # Add token
             if req.output_ids is None:
                 req.output_ids = []
             
-            # Just appending a placeholder token ID (e.g. 1)
-            # In reality, we'd append the sampled token id
-            req.output_ids.append(1) 
+            req.output_ids.append(next_token) 
 
             # Check stopping conditions
             if req.current_position >= req.max_tokens:

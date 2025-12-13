@@ -9,6 +9,7 @@
 YAIE (Yet Another Inference Engine) is an educational project designed to help students and developers understand how modern LLM inference engines work. This implementation is inspired by state-of-the-art systems like SGLang, vLLM, FlashInfer and other efficient inference engines, focusing on continuous batching, radial attention, and FlashInfer-style optimizations.
 
 ## Table of Contents
+
 - [Overview](#overview)
 - [Features](#features)
 <!--- [Architecture](#architecture)-->
@@ -72,12 +73,14 @@ The engine follows a modular architecture:
 ## Installation
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/yourusername/YAIE.git
    cd YAIE
    ```
 
 2. Create a virtual environment (recommended):
+
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -93,27 +96,32 @@ The engine follows a modular architecture:
 ### Server Mode (OpenAI API Compatible)
 
 Start the server with a specific model:
+
 ```bash
 yaie serve microsoft/DialoGPT-medium --host localhost --port 8000
 ```
 
 The server will:
+
 - Check for the model in local HuggingFace cache
 - Download if not present
 - Start an OpenAI-compatible API server
 
 API endpoints:
+
 - `POST /v1/chat/completions` - Chat completions
 - `GET /v1/models` - List available models
 
 ### CLI Chat Mode
 
 Start an interactive chat session:
+
 ```bash
 yaie chat microsoft/DialoGPT-medium
 ```
 
 The chat will:
+
 - Check for the model in local HuggingFace cache
 - Download if not present
 - Start an interactive chat session
@@ -134,6 +142,7 @@ python setup_kernels.py build_ext --inplace
 ```
 
 **Note**: Kernel building requires:
+
 - CUDA toolkit installed
 - PyTorch with CUDA support
 - Compatible GPU with compute capability >= 6.0
@@ -145,22 +154,27 @@ If CUDA is not available, the engine will run in CPU-only mode.
 By implementing the kernels and components in this project, you will learn:
 
 1. **Continuous Batching Concepts**:
+
    - Problem: Traditional batching requires all requests to have the same length
    - Solution: Dynamically batch requests and handle them at different stages
 
 2. **Paged KV-Cache Management**:
+
    - Problem: KV-cache memory fragmentation with variable-length requests
    - Solution: Use paged memory management similar to OS virtual memory
 
 3. **Radial Attention & Prefix Sharing**:
+
    - Problem: Redundant computation for requests with similar prefixes
    - Solution: Share computed attention across requests with common prefixes (SGLang-style)
 
 4. **FlashInfer-Style Optimizations**:
+
    - Problem: Inefficient memory access patterns during attention computation
    - Solution: Optimized attention for both prefill and decode phases
 
 5. **CUDA Kernel Programming**:
+
    - Efficient GPU memory access patterns
    - Parallel computation for attention mechanisms
    - Memory bandwidth optimization
@@ -179,17 +193,21 @@ This project provides a detailed guide for implementing the various kernels and 
 ### Kernels to Implement:
 
 1. **Attention Kernels**:
+
    - FlashAttention forward and backward
    - Paged attention
    - RoPE (Rotary Position Embedding)
 
 2. **Normalization Kernels**:
+
    - RMS normalization
 
 3. **Activation Kernels**:
+
    - SiLU and multiplication fusion
 
 4. **Memory Management**:
+
    - KV-cache management with paging
    - Block allocation and deallocation
 
@@ -223,3 +241,26 @@ We would like to acknowledge the significant contributions of several state-of-t
 - **LightLLM**: For showing how to implement efficient inference with various optimization techniques
 
 These projects have advanced the field of LLM inference significantly, and this educational engine draws concepts and inspiration from their innovative approaches to continuous batching, attention optimization, and memory management.
+
+## 📚 Documentation
+
+Mini-YAIE comes with a comprehensive educational guide (built with `mdbook`) that covers:
+
+- Core Concepts (LLM Inference, Continuous Batching, Radix Attention)
+- System Architecture Deep Dive
+- Step-by-step Implementation Guides for Python and CUDA kernels
+
+### Viewing the Docs
+
+To serve the documentation locally:
+
+```bash
+# Install mdbook (if not already installed)
+cargo install mdbook
+
+# Serve the docs
+make docs-serve
+# Or manually: mdbook serve docs
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.

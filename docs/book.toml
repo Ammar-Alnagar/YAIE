@@ -1,0 +1,10 @@
+[book]
+authors = ["Mini-YAIE Team"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Mini-YAIE: Educational LLM Inference Engine"
+
+[output.html]
+git-repository-url = "https://github.com/yourusername/YAIE"
+site-url = "/YAIE/"

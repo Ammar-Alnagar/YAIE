@@ -1,46 +1,18 @@
-.PHONY: all install build-kernels clean test docs
+.PHONY: install test clean format docs-serve
 
-# Default target
-all: install
-
-# Install the package in development mode
 install:
 	pip install -e .
 
-# Build custom CUDA kernels
-build-kernels:
-	python setup_kernels.py build_ext --inplace
-
-# Alternative build method using the shell script
-build-kernels-sh:
-	./build_kernels.sh
-
-# Clean build artifacts
-clean:
-	rm -rf build/
-	rm -rf dist/
-	rm -rf *.egg-info/
-	find . -name "*.so" -delete
-	find . -name "*.pyc" -delete
-	find . -name "__pycache__" -delete
-
-# Run tests (when implemented)
 test:
-	python -m pytest tests/
+	pytest tests/
 
-# Format code
+clean:
+	rm -rf build/ dist/ *.egg-info
+	find . -name "__pycache__" -type d -exec rm -rf {} +
+
 format:
-	black src/
+	black src tests
+	isort src tests
 
-# Lint code
-lint:
-	flake8 src/
-
-# Install development dependencies
-dev:
-	pip install -e .[dev]
-
-# Build documentation (placeholder)
-docs:
-	@echo "Documentation generation would happen here"
-	@echo "For now, please refer to README.md and guide.md"
+docs-serve:
+	mdbook serve docs
