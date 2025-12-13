@@ -6,5 +6,5 @@ src = "src"
 title = "Mini-YAIE: Educational LLM Inference Engine"
 
 [output.html]
-git-repository-url = "https://github.com/yourusername/YAIE"
-site-url = "/YAIE/"
+git-repository-url = "https://github.com/ammar-alnagar/Mini-YAIE"
+site-url = "/Mini-YAIE/"
