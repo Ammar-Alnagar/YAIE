@@ -2,6 +2,19 @@
 
 The `InferenceEngine` class is the conductor of the orchestra. It ties everything together.
 
+## The Process Visualized
+
+```mermaid
+graph TD
+    User -->|Prompts| Engine
+    Engine -->|Request| Scheduler
+    Scheduler -->|Batch| Engine
+    Engine -->|Prefill| Model
+    Engine -->|Decode| Model
+    Model -->|Logits| Sampling
+    Sampling -->|Token| Engine
+```
+
 ## Responsibilities
 
 - **Initialization**: Loads the Model, Tokenizer, Scheduler, and Memory Manager.

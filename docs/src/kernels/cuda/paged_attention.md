@@ -1,25 +1,58 @@
 # Paged Attention (`kernels/cuda/paged_attention.cu`)
 
-## Concept
+## 1. Concept: Indirection
 
-Compute attention where K and V are stored in non-contiguous blocks.
+Paged Attention is just standard attention, but `K` and `V` are not contiguous.
+We have to "gather" them using a Page Table.
 
-## Implementation Goal
+```mermaid
+graph LR
+    Thread -->|1. Get Logical idx| Logic[Token #42]
+    Logic -->|2. Lookup Table| Table[Block 2, Offset 10]
+    Table -->|3. Get Physical Addr| Phys[0xA000...]
+    Phys -->|4. Read| Data[Value]
+```
 
-Implement `paged_attention_kernel`:
+---
 
-### Inputs
+## 2. Implementation Guide
 
-- `block_tables`: A tensor mapping `[request_id, logical_block_idx] -> physical_block_idx`.
+### Step 1: Understand the Block Table
 
-### Logic
+You are passed `block_tables` tensor of shape `[num_seqs, max_blocks]`.
 
-1.  **Thread Mapping**: Each thread block handles one sequence (request).
-2.  **Gathering**:
-    - Instead of `K[i]`, we must compute the physical address.
-    - `block_number = block_tables[request_id][token_index / block_size]`
-    - `block_offset = token_index % block_size`
-    - `physical_addr = base_ptr + block_number * stride + block_offset`
-3.  **Attention**:
-    - Load K, V using the calculated physical addresses.
-    - Compute Attention as usual.
+- It holds integer indices of physical blocks.
+- `block_tables[req_id][0]` is the first block of that request.
+
+### Step 2: Calculate Physical Address
+
+Inside your kernel, you want the Key vector for token `t` of request `r`.
+
+```cpp
+int block_idx = t / BLOCK_SIZE;
+int block_offset = t % BLOCK_SIZE;
+int physical_block_number = block_tables[r][block_idx];
+
+// Pointer arithmetic
+float* k_ptr = key_cache_base
+             + physical_block_number * (BLOCK_SIZE * HEAD_DIM * NUM_HEADS)
+             + ... // navigate to specific head and offset
+```
+
+### Step 3: Load Data
+
+Using the pointer `k_ptr`, load the vector into registers or shared memory.
+
+### Step 4: Compute Attention
+
+Once loaded, the math is identical to standard Attention or Flash Attention.
+$Q \cdot K^T$, Softmax, $\cdot V$.
+
+---
+
+## 3. Your Task
+
+Implement `paged_attention_kernel` in `src/kernels/cuda/paged_attention.cu`.
+
+1.  Focus on the **address calculation** logic. That is the only difference!
+2.  Use the `copy_blocks` kernel (Memory Ops) to help set up test data if needed.

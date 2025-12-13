@@ -9,6 +9,32 @@ Large Language Model (LLM) inference is the process of generating text from a tr
 - **Output**: The KV (Key-Value) cache for the prompt and the first generated token.
 - **Characteristic**: Compute-bound. We maximize parallelism here.
 
+## The Process Visualized
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant E as Engine
+    participant M as Model
+
+    rect rgb(200, 220, 255)
+    note right of U: Prefill Phase (Parallel)
+    U->>E: Prompt: "A B C"
+    E->>M: Forward(["A", "B", "C"])
+    M-->>E: KV Cache + Logits(C)
+    end
+
+    rect rgb(220, 255, 200)
+    note right of U: Decode Phase (Serial)
+    loop Until EOS
+        E->>M: Forward([Last Token])
+        M-->>E: Update KV + Logits
+        E->>E: Sample Next Token
+    end
+    end
+    E->>U: Response
+```
+
 ## 2. Decode Phase (The "Generation")
 
 - **Input**: The previously generated token.

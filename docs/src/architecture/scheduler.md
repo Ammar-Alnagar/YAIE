@@ -22,6 +22,17 @@ In a full implementation, this uses the Radix Tree to find the precise token mat
 1.  **Prioritize Decode**: To minimize latency, we always try to run pending decode steps first.
 2.  **Fill with Prefill**: If there is leftover GPU memory (or batch size capacity), we pull new requests from the queue for prefill.
 
+```mermaid
+stateDiagram-v2
+    [*] --> Pending
+    Pending --> RunningPrefill : schedule_step()
+    RunningPrefill --> ScheduledDecode : process_prefill()
+    ScheduledDecode --> RunningDecode : schedule_step()
+    RunningDecode --> ScheduledDecode : Not Finished
+    RunningDecode --> Completed : Finished
+    Completed --> [*]
+```
+
 ## State Machine
 
 Requests transition through states:

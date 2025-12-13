@@ -1,22 +1,101 @@
 # Flash Attention (`kernels/cuda/flash_attention.cu`)
 
-## Concept
+## 1. Concept: Memory Bandwidth
 
-A standard attention implementation is $O(N^2)$ in memory usage. Flash Attention uses tiling to compute attention in constant memory.
+The main bottleneck in Attention is reading the huge $N \times N$ matrix from memory.
+**Flash Attention** breaks the problem into small "tiles" that fit into the GPU's fast **SRAM** (Shared Memory). We compute everything for that tile without going back to slow Global Memory.
 
-## Implementation Goal
+```mermaid
+block-beta
+    columns 3
+    block:GlobalMemory
+        columns 1
+        Q[Matrix Q]
+        K[Matrix K]
+        V[Matrix V]
+    end
 
-Implement `flash_attention_forward`:
+    space
 
-### Algorithm (simplified)
+    block:SRAM
+        columns 1
+        TileQ[Tile Q]
+        TileK[Tile K]
+        TileV[Tile V]
+        Comp(("Compute"))
+    end
 
-1.  **Tiling**: Load a block of Queries (Q) into shared memory (SRAM).
-2.  **Loop**: Iterate over blocks of Keys (K) and Values (V) from HBM (Global Memory).
-    - Load K, V block into SRAM.
-    - Compute QK^T (Attention Scores).
-    - Apply Softmax (using online softmax scaling).
-    - Compute Score \* V.
-    - Accumulate result to Output.
-3.  **Write Output**: Store final result to HBM.
+    Q --> TileQ
+    K --> TileK
+    V --> TileV
+```
 
-> **Note**: For this educational project, a naive CUDA implementation is acceptable if tiling is too complex.
+---
+
+## 2. Implementation Guide
+
+We will implement a **simplified** version. Doing full FlashAttention v2 is extremely complex. We aim for "Tiled Attention".
+
+### Step 0: The Setup
+
+Open `src/kernels/cuda/flash_attention.cu`.
+Identify the `flash_attention_forward` function.
+
+You have pointers to:
+
+- `query` (Q), `key` (K), `value` (V) residing in Global Memory.
+
+### Step 1: Define Thread Layout
+
+We want to process tiles.
+
+- **Grid**: One block per query chunk.
+- **Block**: Threads within the block handle individual heads or elements.
+
+```cpp
+// Example
+dim3 grid(num_batches, num_heads);
+dim3 block(128); // 128 threads work together on one head
+```
+
+### Step 2: Load Tiles to Shared Memory
+
+You need `__shared__` memory arrays.
+
+```cpp
+__shared__ float s_Q[TILE_SIZE][HEAD_DIM];
+__shared__ float s_K[TILE_SIZE][HEAD_DIM];
+```
+
+Use `threadIdx.x` to cooperatively load data from Global `Q` to Shared `s_Q`.
+**Remember**: call `__syncthreads()` after loading!
+
+### Step 3: Compute $QK^T$ (Scores)
+
+Iterate over your shared Q and K.
+Calculate the dot product.
+Store in a register (local variable).
+
+### Step 4: Softmax (The "Online" Trick)
+
+In standard softmax, you need the max of the _entire_ row. Here we only see a tile!
+**Trick**: Keep a running max ($m$) and running sum ($l$). Update them as you see new tiles.
+
+- $m_{new} = \max(m_{old}, \max(current\_tile))$
+- Adjust previous sums by multiplying by $e^{m_{old} - m_{new}}$.
+
+### Step 5: Compute Score $\times$ V
+
+Once you have the probabilities for the tile, multiply by `s_V` (which you also loaded).
+Accumulate into `output`.
+
+---
+
+## 3. Hints
+
+- Start with a **Naive** kernel first! Forget shared memory. Just loops.
+  - Thread per query token.
+  - Loop over all key tokens.
+  - Compute.
+  - This is $O(N^2)$ memory reads but verifies your logic is correct.
+- Only optimize to Shared Memory once logic works.
