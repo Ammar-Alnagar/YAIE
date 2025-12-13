@@ -55,7 +55,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fdda5022.js";
+            window.path_to_searchindex_js = "searchindex-b58c91dd.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-676105c4.js"></script>
@@ -325,28 +325,28 @@ cargo install mdbook
 <h2 id="visualizing-the-difference"><a class="header" href="#visualizing-the-difference">Visualizing the Difference</a></h2>
 <pre><code class="language-mermaid">gantt
     title Static Batching (Inefficient)
-    dateFormat S
+    dateFormat X
     axisFormat %s
 
     section Batch 1
-    Req A (Short) :done, a1, 0, 2s
-    Padding       :crit, 2s, 4s
-    Req B (Long)  :active, b1, 0, 4s
+    Req A (Short) :done, a1, 0, 2
+    Padding       :crit, 2, 4
+    Req B (Long)  :active, b1, 0, 4
 
     section Batch 2
-    Req C :c1, 4, 6s
+    Req C :c1, 4, 6
 </code></pre>
 <pre><code class="language-mermaid">gantt
     title Continuous Batching (Efficient)
-    dateFormat S
+    dateFormat X
     axisFormat %s
 
     section GPU Stream
-    Req A (Short) :done, a1, 0, 2s
-    Req C (New!)  :active, c1, 2, 4s
+    Req A (Short) :done, a1, 0, 2
+    Req C (New!)  :active, c1, 2, 4
 
     section GPU Stream 2
-    Req B (Long)  :active, b1, 0, 4s
+    Req B (Long)  :active, b1, 0, 4
 </code></pre>
 <h2 id="the-solution-continuous-batching-orca"><a class="header" href="#the-solution-continuous-batching-orca">The Solution: Continuous Batching (Orca)</a></h2>
 <p>Introduced by the Orca paper, Continuous Batching (or Iteration-level Batching) decouples the implementation of a batch from the user’s view.</p>
@@ -402,7 +402,7 @@ cargo install mdbook
 <li><strong>Internal Fragmentation</strong>: If a request was shorter than max length, memory was wasted.</li>
 <li><strong>External Fragmentation</strong>: We couldn’t fit a new request even if total free memory was sufficient, because no single contiguous block was large enough.</li>
 </ul>
-<h2 id="the-solution-pagiing"><a class="header" href="#the-solution-pagiing">The Solution: Pagiing</a></h2>
+<h2 id="the-solution-paging"><a class="header" href="#the-solution-paging">The Solution: Paging</a></h2>
 <p>Inspired by virtual memory in OS:</p>
 <ol>
 <li><strong>Blocks</strong>: Divide KV Cache into fixed-size blocks (e.g., 16 tokens per block).</li>
