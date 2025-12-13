@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cbd8f59e.js";
+            window.path_to_searchindex_js = "../searchindex-f4284004.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-676105c4.js"></script>
@@ -179,6 +179,16 @@
                     <main>
                         <h1 id="the-engine-enginepy"><a class="header" href="#the-engine-enginepy">The Engine (<code>engine.py</code>)</a></h1>
 <p>The <code>InferenceEngine</code> class is the conductor of the orchestra. It ties everything together.</p>
+<h2 id="the-process-visualized"><a class="header" href="#the-process-visualized">The Process Visualized</a></h2>
+<pre><code class="language-mermaid">graph TD
+    User --&gt;|Prompts| Engine
+    Engine --&gt;|Request| Scheduler
+    Scheduler --&gt;|Batch| Engine
+    Engine --&gt;|Prefill| Model
+    Engine --&gt;|Decode| Model
+    Model --&gt;|Logits| Sampling
+    Sampling --&gt;|Token| Engine
+</code></pre>
 <h2 id="responsibilities"><a class="header" href="#responsibilities">Responsibilities</a></h2>
 <ul>
 <li><strong>Initialization</strong>: Loads the Model, Tokenizer, Scheduler, and Memory Manager.</li>

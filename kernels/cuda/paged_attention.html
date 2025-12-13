@@ -35,7 +35,7 @@
             const path_to_root = "../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../searchindex-cbd8f59e.js";
+            window.path_to_searchindex_js = "../../searchindex-f4284004.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../../toc-676105c4.js"></script>
@@ -178,31 +178,45 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="paged-attention-kernelscudapaged_attentioncu"><a class="header" href="#paged-attention-kernelscudapaged_attentioncu">Paged Attention (<code>kernels/cuda/paged_attention.cu</code>)</a></h1>
-<h2 id="concept"><a class="header" href="#concept">Concept</a></h2>
-<p>Compute attention where K and V are stored in non-contiguous blocks.</p>
-<h2 id="implementation-goal"><a class="header" href="#implementation-goal">Implementation Goal</a></h2>
-<p>Implement <code>paged_attention_kernel</code>:</p>
-<h3 id="inputs"><a class="header" href="#inputs">Inputs</a></h3>
+<h2 id="1-concept-indirection"><a class="header" href="#1-concept-indirection">1. Concept: Indirection</a></h2>
+<p>Paged Attention is just standard attention, but <code>K</code> and <code>V</code> are not contiguous.
+We have to “gather” them using a Page Table.</p>
+<pre><code class="language-mermaid">graph LR
+    Thread --&gt;|1. Get Logical idx| Logic[Token #42]
+    Logic --&gt;|2. Lookup Table| Table[Block 2, Offset 10]
+    Table --&gt;|3. Get Physical Addr| Phys[0xA000...]
+    Phys --&gt;|4. Read| Data[Value]
+</code></pre>
+<hr>
+<h2 id="2-implementation-guide"><a class="header" href="#2-implementation-guide">2. Implementation Guide</a></h2>
+<h3 id="step-1-understand-the-block-table"><a class="header" href="#step-1-understand-the-block-table">Step 1: Understand the Block Table</a></h3>
+<p>You are passed <code>block_tables</code> tensor of shape <code>[num_seqs, max_blocks]</code>.</p>
 <ul>
-<li><code>block_tables</code>: A tensor mapping <code>[request_id, logical_block_idx] -&gt; physical_block_idx</code>.</li>
+<li>It holds integer indices of physical blocks.</li>
+<li><code>block_tables[req_id][0]</code> is the first block of that request.</li>
 </ul>
-<h3 id="logic"><a class="header" href="#logic">Logic</a></h3>
+<h3 id="step-2-calculate-physical-address"><a class="header" href="#step-2-calculate-physical-address">Step 2: Calculate Physical Address</a></h3>
+<p>Inside your kernel, you want the Key vector for token <code>t</code> of request <code>r</code>.</p>
+<pre><code class="language-cpp">int block_idx = t / BLOCK_SIZE;
+int block_offset = t % BLOCK_SIZE;
+int physical_block_number = block_tables[r][block_idx];
+
+// Pointer arithmetic
+float* k_ptr = key_cache_base
+             + physical_block_number * (BLOCK_SIZE * HEAD_DIM * NUM_HEADS)
+             + ... // navigate to specific head and offset
+</code></pre>
+<h3 id="step-3-load-data"><a class="header" href="#step-3-load-data">Step 3: Load Data</a></h3>
+<p>Using the pointer <code>k_ptr</code>, load the vector into registers or shared memory.</p>
+<h3 id="step-4-compute-attention"><a class="header" href="#step-4-compute-attention">Step 4: Compute Attention</a></h3>
+<p>Once loaded, the math is identical to standard Attention or Flash Attention.
+$Q \cdot K^T$, Softmax, $\cdot V$.</p>
+<hr>
+<h2 id="3-your-task"><a class="header" href="#3-your-task">3. Your Task</a></h2>
+<p>Implement <code>paged_attention_kernel</code> in <code>src/kernels/cuda/paged_attention.cu</code>.</p>
 <ol>
-<li><strong>Thread Mapping</strong>: Each thread block handles one sequence (request).</li>
-<li><strong>Gathering</strong>:
-<ul>
-<li>Instead of <code>K[i]</code>, we must compute the physical address.</li>
-<li><code>block_number = block_tables[request_id][token_index / block_size]</code></li>
-<li><code>block_offset = token_index % block_size</code></li>
-<li><code>physical_addr = base_ptr + block_number * stride + block_offset</code></li>
-</ul>
-</li>
-<li><strong>Attention</strong>:
-<ul>
-<li>Load K, V using the calculated physical addresses.</li>
-<li>Compute Attention as usual.</li>
-</ul>
-</li>
+<li>Focus on the <strong>address calculation</strong> logic. That is the only difference!</li>
+<li>Use the <code>copy_blocks</code> kernel (Memory Ops) to help set up test data if needed.</li>
 </ol>
 
                     </main>

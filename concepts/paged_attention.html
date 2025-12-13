@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cbd8f59e.js";
+            window.path_to_searchindex_js = "../searchindex-f4284004.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-676105c4.js"></script>
@@ -192,6 +192,35 @@
 <li><strong>Non-Contiguous</strong>: Blocks can be stored anywhere in physical GPU memory.</li>
 <li><strong>Mapping</strong>: A “Block Table” maps logical token positions to physical block addresses.</li>
 </ol>
+<pre><code class="language-mermaid">graph LR
+    subgraph Logical["Logical Sequence (Request)"]
+        L0[Block 0: "Hello"]
+        L1[Block 1: "World"]
+        L2[Block 2: "!"]
+    end
+
+    subgraph Table["Page Table"]
+        T0[0 -&gt; 7]
+        T1[1 -&gt; 2]
+        T2[2 -&gt; 9]
+    end
+
+    subgraph Physical["GPU Memory (Physical Blocks)"]
+        B0[Block 0]
+        B1[Block 1]
+        B2[Block 2: "World"]:::used
+        B3...
+        B7[Block 7: "Hello"]:::used
+        B8...
+        B9[Block 9: "!"]:::used
+    end
+
+    L0 --&gt; T0 --&gt; B7
+    L1 --&gt; T1 --&gt; B2
+    L2 --&gt; T2 --&gt; B9
+
+    classDef used fill:#aaffaa;
+</code></pre>
 <h2 id="the-kernel"><a class="header" href="#the-kernel">The Kernel</a></h2>
 <p>The Paged Attention kernel allows the Attention mechanism to read keys and values from these non-contiguous blocks on the fly, enabling near-zero memory waste.</p>
 

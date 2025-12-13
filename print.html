@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cbd8f59e.js";
+            window.path_to_searchindex_js = "searchindex-f4284004.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-676105c4.js"></script>
@@ -263,6 +263,29 @@ cargo install mdbook
 <li><strong>Output</strong>: The KV (Key-Value) cache for the prompt and the first generated token.</li>
 <li><strong>Characteristic</strong>: Compute-bound. We maximize parallelism here.</li>
 </ul>
+<h2 id="the-process-visualized"><a class="header" href="#the-process-visualized">The Process Visualized</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant U as User
+    participant E as Engine
+    participant M as Model
+
+    rect rgb(200, 220, 255)
+    note right of U: Prefill Phase (Parallel)
+    U-&gt;&gt;E: Prompt: "A B C"
+    E-&gt;&gt;M: Forward(["A", "B", "C"])
+    M--&gt;&gt;E: KV Cache + Logits(C)
+    end
+
+    rect rgb(220, 255, 200)
+    note right of U: Decode Phase (Serial)
+    loop Until EOS
+        E-&gt;&gt;M: Forward([Last Token])
+        M--&gt;&gt;E: Update KV + Logits
+        E-&gt;&gt;E: Sample Next Token
+    end
+    end
+    E-&gt;&gt;U: Response
+</code></pre>
 <h2 id="2-decode-phase-the-generation"><a class="header" href="#2-decode-phase-the-generation">2. Decode Phase (The “Generation”)</a></h2>
 <ul>
 <li><strong>Input</strong>: The previously generated token.</li>
@@ -280,6 +303,32 @@ cargo install mdbook
 <li><strong>Waste</strong>: Padding wastes computation and memory.</li>
 <li><strong>Latency</strong>: We must wait for the longest sequence to finish generating before finishing the batch.</li>
 </ul>
+<h2 id="visualizing-the-difference"><a class="header" href="#visualizing-the-difference">Visualizing the Difference</a></h2>
+<pre><code class="language-mermaid">gantt
+    title Static Batching (Inefficient)
+    dateFormat S
+    axisFormat %s
+
+    section Batch 1
+    Req A (Short) :done, a1, 0, 2s
+    Padding       :crit, 2s, 4s
+    Req B (Long)  :active, b1, 0, 4s
+
+    section Batch 2
+    Req C :c1, 4, 6s
+</code></pre>
+<pre><code class="language-mermaid">gantt
+    title Continuous Batching (Efficient)
+    dateFormat S
+    axisFormat %s
+
+    section GPU Stream
+    Req A (Short) :done, a1, 0, 2s
+    Req C (New!)  :active, c1, 2, 4s
+
+    section GPU Stream 2
+    Req B (Long)  :active, b1, 0, 4s
+</code></pre>
 <h2 id="the-solution-continuous-batching-orca"><a class="header" href="#the-solution-continuous-batching-orca">The Solution: Continuous Batching (Orca)</a></h2>
 <p>Introduced by the Orca paper, Continuous Batching (or Iteration-level Batching) decouples the implementation of a batch from the user’s view.</p>
 <ol>
@@ -298,6 +347,16 @@ cargo install mdbook
 <li>“Write a Python script to <strong>sort a list</strong>.”</li>
 </ol>
 <p>They share the prefix “Write a Python script to “. In a standard engine, we would compute the KV cache for this prefix twice.</p>
+<pre><code class="language-mermaid">graph TD
+    classDef shared fill:#aaffaa,stroke:#333,stroke-width:2px;
+    classDef unique fill:#ffaaaa,stroke:#333,stroke-width:2px;
+
+    Root((Root)) --&gt; Node1["Write a Python script to"]:::shared
+    Node1 --&gt; Node2["scrape a website"]:::unique
+    Node1 --&gt; Node3["sort a list"]:::unique
+
+    style Node1 fill:#aaffaa
+</code></pre>
 <h2 id="the-radix-tree"><a class="header" href="#the-radix-tree">The Radix Tree</a></h2>
 <p>SGLang maintains a <strong>Radix Tree</strong> (Trie) of all token sequences currently in the KV cache.</p>
 <ul>
@@ -331,6 +390,35 @@ cargo install mdbook
 <li><strong>Non-Contiguous</strong>: Blocks can be stored anywhere in physical GPU memory.</li>
 <li><strong>Mapping</strong>: A “Block Table” maps logical token positions to physical block addresses.</li>
 </ol>
+<pre><code class="language-mermaid">graph LR
+    subgraph Logical["Logical Sequence (Request)"]
+        L0[Block 0: "Hello"]
+        L1[Block 1: "World"]
+        L2[Block 2: "!"]
+    end
+
+    subgraph Table["Page Table"]
+        T0[0 -&gt; 7]
+        T1[1 -&gt; 2]
+        T2[2 -&gt; 9]
+    end
+
+    subgraph Physical["GPU Memory (Physical Blocks)"]
+        B0[Block 0]
+        B1[Block 1]
+        B2[Block 2: "World"]:::used
+        B3...
+        B7[Block 7: "Hello"]:::used
+        B8...
+        B9[Block 9: "!"]:::used
+    end
+
+    L0 --&gt; T0 --&gt; B7
+    L1 --&gt; T1 --&gt; B2
+    L2 --&gt; T2 --&gt; B9
+
+    classDef used fill:#aaffaa;
+</code></pre>
 <h2 id="the-kernel"><a class="header" href="#the-kernel">The Kernel</a></h2>
 <p>The Paged Attention kernel allows the Attention mechanism to read keys and values from these non-contiguous blocks on the fly, enabling near-zero memory waste.</p>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -369,6 +457,16 @@ cargo install mdbook
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="the-engine-enginepy"><a class="header" href="#the-engine-enginepy">The Engine (<code>engine.py</code>)</a></h1>
 <p>The <code>InferenceEngine</code> class is the conductor of the orchestra. It ties everything together.</p>
+<h2 id="the-process-visualized-1"><a class="header" href="#the-process-visualized-1">The Process Visualized</a></h2>
+<pre><code class="language-mermaid">graph TD
+    User --&gt;|Prompts| Engine
+    Engine --&gt;|Request| Scheduler
+    Scheduler --&gt;|Batch| Engine
+    Engine --&gt;|Prefill| Model
+    Engine --&gt;|Decode| Model
+    Model --&gt;|Logits| Sampling
+    Sampling --&gt;|Token| Engine
+</code></pre>
 <h2 id="responsibilities"><a class="header" href="#responsibilities">Responsibilities</a></h2>
 <ul>
 <li><strong>Initialization</strong>: Loads the Model, Tokenizer, Scheduler, and Memory Manager.</li>
@@ -406,6 +504,15 @@ prefix_hash = sha256(prompt)
 <li><strong>Prioritize Decode</strong>: To minimize latency, we always try to run pending decode steps first.</li>
 <li><strong>Fill with Prefill</strong>: If there is leftover GPU memory (or batch size capacity), we pull new requests from the queue for prefill.</li>
 </ol>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; Pending
+    Pending --&gt; RunningPrefill : schedule_step()
+    RunningPrefill --&gt; ScheduledDecode : process_prefill()
+    ScheduledDecode --&gt; RunningDecode : schedule_step()
+    RunningDecode --&gt; ScheduledDecode : Not Finished
+    RunningDecode --&gt; Completed : Finished
+    Completed --&gt; [*]
+</code></pre>
 <h2 id="state-machine"><a class="header" href="#state-machine">State Machine</a></h2>
 <p>Requests transition through states:
 <code>PENDING</code> -&gt; <code>RUNNING_PREFILL</code> -&gt; <code>SCHEDULED_DECODE</code> -&gt; <code>RUNNING_DECODE</code> -&gt; <code>COMPLETED</code></p>
@@ -438,78 +545,227 @@ prefix_hash = sha256(prompt)
 While computation happens in CUDA, the <em>logic</em> of memory management and prefix matching is complex and best handled in Python (or C++ CPU code) before dispatching to the GPU.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="radix-tree-kernelsradix_treepy"><a class="header" href="#radix-tree-kernelsradix_treepy">Radix Tree (<code>kernels/radix_tree.py</code>)</a></h1>
-<h2 id="concept"><a class="header" href="#concept">Concept</a></h2>
-<p>A <strong>Radix Tree</strong> (or Compressed Trie) is a space-optimized prefix tree.</p>
-<h2 id="implementation-goal"><a class="header" href="#implementation-goal">Implementation Goal</a></h2>
-<p>You need to implement the <code>RadixTree</code> class with:</p>
-<h3 id="1-inserttoken_ids-request_id"><a class="header" href="#1-inserttoken_ids-request_id">1. <code>insert(token_ids, request_id)</code></a></h3>
+<h2 id="1-concept-the-prefix-tree"><a class="header" href="#1-concept-the-prefix-tree">1. Concept: The Prefix Tree</a></h2>
+<p>A <strong>Radix Tree</strong> (or Compressed Trie) is a data structure that succinctly stores sequences of tokens. Unlike a standard trie where each edge is a single character (or token), a Radix Tree allows edges to be <strong>sequences</strong> of tokens.</p>
+<h3 id="optimization-goal"><a class="header" href="#optimization-goal">Optimization Goal</a></h3>
+<p>When two requests start with <code>"The quick brown fox"</code>, we want to store that sequence <strong>once</strong>.</p>
 <ul>
-<li>Traverse the tree with <code>token_ids</code>.</li>
-<li>If a path exists, follow it.</li>
-<li>If tokens diverge, <strong>split</strong> the edge and create a new node.</li>
-<li>Store the <code>request_id</code> at the leaf.</li>
+<li><strong>Request A</strong>: <code>"The quick brown fox jumps"</code></li>
+<li><strong>Request B</strong>: <code>"The quick brown fox sleeps"</code></li>
 </ul>
-<h3 id="2-match_prefixtoken_ids"><a class="header" href="#2-match_prefixtoken_ids">2. <code>match_prefix(token_ids)</code></a></h3>
+<p>In our tree, we should have a shared node for <code>"The quick brown fox"</code>, which then branches into <code>"jumps"</code> and <code>"sleeps"</code>.</p>
+<pre><code class="language-mermaid">flowchart TD
+    Root((Root)) --&gt; Shared["The quick brown fox"]
+    Shared --&gt; Branch1["jumps"]
+    Shared --&gt; Branch2["sleeps"]
+
+    style Shared fill:#aaffaa
+</code></pre>
+<hr>
+<h2 id="2-implementation-guide"><a class="header" href="#2-implementation-guide">2. Implementation Guide</a></h2>
+<p>Open <code>src/kernels/radix_tree.py</code>. You will implement the <code>RadixTree</code> class step-by-step.</p>
+<h3 id="step-1-define-the-tree-node"><a class="header" href="#step-1-define-the-tree-node">Step 1: Define the Tree Node</a></h3>
+<p>First, we need a node structure. Unlike a binary tree, a Radix Node can have many children.</p>
+<pre><code class="language-python">class RadixTreeNode:
+    def __init__(self, prefix: List[int]):
+        self.prefix = prefix               # The sequence of tokens on this edge
+        self.children: Dict[int, RadixTreeNode] = {} # Map: first_token -&gt; Child Node
+        self.request_id: Optional[str] = None # If a request ends here, store its ID
+        self.lock_count = 0                # Reference counting (how many requests use this?)
+</code></pre>
+<p><strong>Task</strong>: Locate the <code>RadixTreeNode</code> class and ensure it has these fields.</p>
+<hr>
+<h3 id="step-2-implement-match_prefix"><a class="header" href="#step-2-implement-match_prefix">Step 2: Implement <code>match_prefix</code></a></h3>
+<p>Before inserting, we need a way to see how much of a new prompt <em>already exists</em> in the tree.</p>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li>Start at <code>self.root</code>.</li>
+<li>Compare the input <code>token_ids</code> with the edges in the tree.</li>
+<li>Traverse down as long as the tokens match exactly.</li>
+<li>Return the last matching Node and the number of matching tokens.</li>
+</ol>
+<p><strong>Your Turn</strong>:
+Implement <code>find_shared_prefixes(token_ids)</code> in <code>RadixTree</code>.</p>
+<blockquote>
+<p><em>Hint</em>: Use a while loop. At each node, look at <code>node.children[token_ids[current_idx]]</code>. If it exists, check if the full edge <code>child.prefix</code> matches the next chunk of your input.</p>
+</blockquote>
+<hr>
+<h3 id="step-3-implement-insert_request-the-hard-part"><a class="header" href="#step-3-implement-insert_request-the-hard-part">Step 3: Implement <code>insert_request</code> (The Hard Part)</a></h3>
+<p>Now, inserting a new request. This involves <strong>splitting</strong> nodes if a partial match is found.</p>
+<p><strong>Scenario</strong>:</p>
 <ul>
-<li>Traverse the tree to find the longest common prefix.</li>
-<li>Return the <code>node_id</code> and the length of the match.</li>
-<li>This tells the scheduler how many tokens we can skip computing!</li>
+<li>Tree has edge <code>[1, 2, 3, 4]</code>.</li>
+<li>You insert <code>[1, 2, 5]</code>.</li>
 </ul>
-<h3 id="3-removerequest_id"><a class="header" href="#3-removerequest_id">3. <code>remove(request_id)</code></a></h3>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li>Trace the path like in Step 2.</li>
+<li>If you differ in the <em>middle</em> of an edge (e.g., matched <code>1, 2</code> but tree has <code>3</code>, you have <code>5</code>):
 <ul>
-<li>When a request finishes, decrement reference counts.</li>
-<li>If a node has no references, free its associated KV cache blocks.</li>
+<li><strong>Split</strong>: Create a new parent node for <code>[1, 2]</code>.</li>
+<li>Make the old node <code>[3, 4]</code> a child of this new parent.</li>
+<li>Create your new node <code>[5]</code> as another child.</li>
 </ul>
+</li>
+</ol>
+<pre><code class="language-mermaid">flowchart TD
+    Start([Insert 1, 2, 5]) --&gt; Match{Match 1, 2?}
+    Match --&gt;|Yes| Diverge{Next is 3 vs 5}
+    Diverge --&gt; Split[Split Edge]
+    Split --&gt; Old[Child: 3, 4]
+    Split --&gt; New[Child: 5]
+</code></pre>
+<p><strong>Your Turn</strong>:
+Implement <code>insert_request(request_id, token_ids)</code>.</p>
+<ul>
+<li>Use your <code>match_prefix</code> logic helper.</li>
+<li>Handle the 3 cases: Exact match, New Branch, or Split Edge.</li>
+</ul>
+<hr>
+<h3 id="step-4-verify"><a class="header" href="#step-4-verify">Step 4: Verify</a></h3>
+<p>Create a test script <code>tests/test_radix_manual.py</code>:</p>
+<pre><code class="language-python">tree = RadixTree()
+tree.insert_request("req1", [1, 2, 3])
+match, count = tree.find_shared_prefixes([1, 2, 3, 4])
+print(f"Matched {count} tokens") # Should be 3!
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="kv-cache-manager-kernelskv_cachepy"><a class="header" href="#kv-cache-manager-kernelskv_cachepy">KV Cache Manager (<code>kernels/kv_cache.py</code>)</a></h1>
-<h2 id="concept-1"><a class="header" href="#concept-1">Concept</a></h2>
-<p>Manage a pool of fixed-size integer IDs representing GPU memory blocks.</p>
-<h2 id="implementation-goal-1"><a class="header" href="#implementation-goal-1">Implementation Goal</a></h2>
-<p>Implement <code>KVCacheManager</code>:</p>
-<h3 id="1-__init__"><a class="header" href="#1-__init__">1. <code>__init__</code></a></h3>
+<h2 id="1-concept-paged-attention"><a class="header" href="#1-concept-paged-attention">1. Concept: Paged Attention</a></h2>
+<p>In a standard implementation, KV Cache is a huge contiguous tensor <code>[MAX_SEQ_LEN, HEADS, DIM]</code>. This wastes memory because most prompts are shorter than <code>MAX_SEQ_LEN</code>.</p>
+<p><strong>Paged Attention</strong> breaks this tensor into small fixed-size blocks (e.g., size 16).</p>
 <ul>
-<li>Create a list of all available block indices: <code>free_blocks = [0, 1, ..., N-1]</code>.</li>
-<li>Initialize an empty mapping <code>request_to_blocks = {}</code>.</li>
+<li><strong>Physical Memory</strong>: A big pool of blocks <code>[NUM_BLOCKS, 16, HEADS, DIM]</code>.</li>
+<li><strong>Logical Memory</strong>: For each request, we just keep a list of block indices <code>[0, 5, 12]</code>.</li>
 </ul>
-<h3 id="2-allocaterequest-num_tokens"><a class="header" href="#2-allocaterequest-num_tokens">2. <code>allocate(request, num_tokens)</code></a></h3>
+<p>Your job is to write the <strong>Allocator</strong> (like <code>malloc</code> in C).</p>
+<hr>
+<h2 id="2-implementation-guide-1"><a class="header" href="#2-implementation-guide-1">2. Implementation Guide</a></h2>
+<p>Open <code>src/kernels/kv_cache.py</code>.</p>
+<h3 id="step-1-initialization"><a class="header" href="#step-1-initialization">Step 1: Initialization</a></h3>
+<p>We need to track which blocks are free and which are used.</p>
+<p><strong>Task</strong>: In <code>__init__</code>:</p>
+<ol>
+<li>Create a list <code>self.free_blocks</code>. Initially, it should contain <em>all</em> integers from <code>0</code> to <code>num_blocks - 1</code>.</li>
+<li>Create a dictionary <code>self.block_tables</code>. This will map <code>request_id -&gt; List[int]</code> (the list of blocks owned by that request).</li>
+</ol>
+<pre><code class="language-python"># Hint
+self.free_blocks = list(range(num_blocks))
+</code></pre>
+<hr>
+<h3 id="step-2-the-allocate_blocks-method"><a class="header" href="#step-2-the-allocate_blocks-method">Step 2: The <code>allocate_blocks</code> Method</a></h3>
+<p>When a request comes in (or generates new tokens), it needs memory.</p>
+<p><strong>Signature</strong>:</p>
+<pre><code class="language-python">def allocate_blocks(self, request_id: str, num_tokens: int) -&gt; List[int]:
+</code></pre>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li>Calculate how many blocks are needed.
 <ul>
-<li>Calculate blocks needed: <code>ceil(num_tokens / block_size)</code>.</li>
-<li>Pop that many indices from <code>free_blocks</code>.</li>
-<li>Store them in <code>request_to_blocks</code>.</li>
-<li><strong>Edge Case</strong>: If not enough blocks, raise OutOfMemory (or trigger eviction).</li>
+<li>$N_{blocks} = \lceil num_tokens / block_size \rceil$</li>
 </ul>
-<h3 id="3-freerequest"><a class="header" href="#3-freerequest">3. <code>free(request)</code></a></h3>
+</li>
+<li>Check if we have enough <code>free_blocks</code>.
 <ul>
-<li>Retrieve the blocks owned by the request.</li>
-<li>Append them back to <code>free_blocks</code>.</li>
-<li>Delete the request mapping.</li>
+<li>If <code>len(free_blocks) &lt; needed</code>, raise an Error (or handle OOM).</li>
 </ul>
+</li>
+<li><strong>Pop</strong> the blocks from <code>free_blocks</code>.</li>
+<li><strong>Assign</strong> them to <code>self.block_tables[request_id]</code>.</li>
+<li>Return the list of allocated block indices.</li>
+</ol>
+<p><strong>Your Turn</strong>: Implement this logic. Watch out for integer division!</p>
+<hr>
+<h3 id="step-3-the-free_blocks-method"><a class="header" href="#step-3-the-free_blocks-method">Step 3: The <code>free_blocks</code> Method</a></h3>
+<p>When a request finishes, we must reclaim memory.</p>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li>Look up the blocks for <code>request_id</code>.</li>
+<li><strong>Append</strong> them back to <code>self.free_blocks</code>.</li>
+<li>Delete the entry from <code>self.block_tables</code>.</li>
+</ol>
+<p><strong>Critical</strong>: Do not double-free! (Though Python sets make this easier, a list is faster for standard stacks).</p>
+<hr>
+<h3 id="step-4-connecting-to-the-engine"><a class="header" href="#step-4-connecting-to-the-engine">Step 4: Connecting to the Engine</a></h3>
+<p>The <code>get_kv_tensors</code> method is checking if you can translate the “Logical” view to the “Physical” view.</p>
+<p><strong>Task</strong>: Implement <code>get_kv_tensors</code>.</p>
+<ul>
+<li>It should presumably return the specific GPU tensors for the blocks.</li>
+<li><em>Note</em>: In this Python simulation, just returning the indices is often enough for the Scheduler to know mapping. The actual <em>Tensor</em> access happens in the CUDA kernel.</li>
+</ul>
+<hr>
+<h3 id="step-5-verify"><a class="header" href="#step-5-verify">Step 5: Verify</a></h3>
+<p>Create <code>tests/test_kv_manual.py</code>:</p>
+<pre><code class="language-python">manager = KVCacheManager(num_blocks=10, block_size=16, ...)
+# Alloc 20 tokens -&gt; needs 2 blocks (indices 0, 1)
+blocks = manager.allocate_blocks("req1", 20)
+print(blocks)
+# Free
+manager.free_blocks("req1")
+print(len(manager.free_blocks)) # Should be 10 again
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="radix-attention-module"><a class="header" href="#radix-attention-module">Radix Attention Module</a></h1>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="sampling-kernelssamplingpy"><a class="header" href="#sampling-kernelssamplingpy">Sampling (<code>kernels/sampling.py</code>)</a></h1>
-<h2 id="concept-2"><a class="header" href="#concept-2">Concept</a></h2>
-<p>Convert the model’s raw output logits (probabilities) into a single token ID.</p>
-<h2 id="implementation-goal-2"><a class="header" href="#implementation-goal-2">Implementation Goal</a></h2>
-<p>Implement <code>SamplingKernel.sample</code>:</p>
-<h3 id="1-temperature"><a class="header" href="#1-temperature">1. Temperature</a></h3>
+<h2 id="1-concept-from-logits-to-tokens"><a class="header" href="#1-concept-from-logits-to-tokens">1. Concept: From Logits to Tokens</a></h2>
+<p>The model outputs <strong>logits</strong>: a vector of size <code>[VOCAB_SIZE]</code> (e.g., 50,000) containing raw scores for the next token.
+We need to pick <strong>one</strong> token ID.</p>
 <ul>
-<li><code>logits = logits / temperature</code></li>
-<li>Higher temp = flatter distribution (more random).</li>
-<li>Lower temp = sharper distribution (more deterministic).</li>
+<li><strong>Greedy</strong>: Just pick <code>argmax()</code>. Boring, repetitive.</li>
+<li><strong>Sampling</strong>: Pick randomly based on probability. Creative!</li>
 </ul>
-<h3 id="2-top-p-nucleus"><a class="header" href="#2-top-p-nucleus">2. Top-P (Nucleus)</a></h3>
+<p>We control the randomness with <strong>Temperature</strong>, <strong>Top-P</strong> (Nucleus), and <strong>Top-K</strong>.</p>
+<hr>
+<h2 id="2-implementation-guide-2"><a class="header" href="#2-implementation-guide-2">2. Implementation Guide</a></h2>
+<p>Open <code>src/kernels/sampling.py</code>.</p>
+<h3 id="step-1-temperature-scaling"><a class="header" href="#step-1-temperature-scaling">Step 1: Temperature Scaling</a></h3>
+<p><strong>Temperature</strong> ($T$) controls confidence.</p>
 <ul>
-<li>Sort probabilities descending.</li>
-<li>Compute cumulative sum.</li>
-<li>Cut off where sum &gt; <code>top_p</code>.</li>
-<li>Renormalize remaining probabilities.</li>
+<li>$T &lt; 1$: Makes peakier (more confident).</li>
+<li>$T &gt; 1$: Makes flatter (more random).</li>
 </ul>
-<h3 id="3-selection"><a class="header" href="#3-selection">3. Selection</a></h3>
+<p><strong>Algorithm</strong>:</p>
+<pre><code class="language-python">logits = logits / temperature
+</code></pre>
 <ul>
-<li><code>torch.multinomial(probs, 1)</code></li>
-<li>Return the selected token ID.</li>
+<li><strong>Watch out</strong>: If $T$ is very close to 0, just do <code>argmax</code> to avoid division by zero!</li>
 </ul>
+<hr>
+<h3 id="step-2-softmax"><a class="header" href="#step-2-softmax">Step 2: Softmax</a></h3>
+<p>Convert logits to probabilities (0.0 to 1.0).</p>
+<pre><code class="language-python">probs = torch.softmax(logits, dim=-1)
+</code></pre>
+<hr>
+<h3 id="step-3-top-k-filtering"><a class="header" href="#step-3-top-k-filtering">Step 3: Top-K Filtering</a></h3>
+<p>Keep only the $K$ most likely tokens. Zero out the rest.</p>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li>Find the value of the $K$-th highest score.</li>
+<li>Mask (set to $-\infty$) anything below that value in <code>logits</code> (or 0 in <code>probs</code>).</li>
+<li>Re-normalize probabilities.</li>
+</ol>
+<hr>
+<h3 id="step-4-top-p-nucleus-filtering-the-tricky-one"><a class="header" href="#step-4-top-p-nucleus-filtering-the-tricky-one">Step 4: Top-P (Nucleus) Filtering (The Tricky One)</a></h3>
+<p>Keep the smallest set of tokens whose cumulative probability adds up to $P$ (e.g., 0.9). This dynamically truncates the long tail of “nonsense” words.</p>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li>Sort probabilities in descending order: <code>sorted_probs, sorted_indices = torch.sort(probs, descending=True)</code>.</li>
+<li>Compute cumulative sum: <code>cumulative_probs = torch.cumsum(sorted_probs, dim=-1)</code>.</li>
+<li>Find cut-off: Mask where <code>cumulative_probs &gt; top_p</code>.
+<ul>
+<li><em>Tip</em>: You want to include the <em>first</em> token that crosses the threshold. So shift the mask right by one.</li>
+</ul>
+</li>
+<li>Scatter the mask back to the original ordering.</li>
+<li>Re-normalize.</li>
+</ol>
+<hr>
+<h3 id="step-5-the-final-selection"><a class="header" href="#step-5-the-final-selection">Step 5: The Final Selection</a></h3>
+<p>Once you have your clean probability distribution:</p>
+<pre><code class="language-python">next_token = torch.multinomial(probs, num_samples=1)
+</code></pre>
+<p><strong>Your Turn</strong>: Implement <code>sample</code> in <code>SamplingKernel</code>. Start simple (just Temperature) and verify, then add Top-P.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cuda-setup"><a class="header" href="#cuda-setup">CUDA Setup</a></h1>
 <p>Implementing custom CUDA kernels requires compiling C++/CUDA code and binding it to Python.</p>
@@ -530,9 +786,9 @@ mini_yaie_kernels.flash_attention.forward(...)
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="memory-operations-kernelscudamemory_opscu"><a class="header" href="#memory-operations-kernelscudamemory_opscu">Memory Operations (<code>kernels/cuda/memory_ops.cu</code>)</a></h1>
-<h2 id="concept-3"><a class="header" href="#concept-3">Concept</a></h2>
+<h2 id="concept"><a class="header" href="#concept">Concept</a></h2>
 <p>Moving data between different GPU memory locations is a frequent operation in Paged Attention.</p>
-<h2 id="implementation-goal-3"><a class="header" href="#implementation-goal-3">Implementation Goal</a></h2>
+<h2 id="implementation-goal"><a class="header" href="#implementation-goal">Implementation Goal</a></h2>
 <p>Implement <code>copy_blocks_kernel</code>:</p>
 <h3 id="signature"><a class="header" href="#signature">Signature</a></h3>
 <pre><code class="language-cpp">void copy_blocks_kernel(
@@ -561,62 +817,135 @@ mini_yaie_kernels.flash_attention.forward(...)
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="flash-attention-kernelscudaflash_attentioncu"><a class="header" href="#flash-attention-kernelscudaflash_attentioncu">Flash Attention (<code>kernels/cuda/flash_attention.cu</code>)</a></h1>
-<h2 id="concept-4"><a class="header" href="#concept-4">Concept</a></h2>
-<p>A standard attention implementation is $O(N^2)$ in memory usage. Flash Attention uses tiling to compute attention in constant memory.</p>
-<h2 id="implementation-goal-4"><a class="header" href="#implementation-goal-4">Implementation Goal</a></h2>
-<p>Implement <code>flash_attention_forward</code>:</p>
-<h3 id="algorithm-simplified"><a class="header" href="#algorithm-simplified">Algorithm (simplified)</a></h3>
-<ol>
-<li><strong>Tiling</strong>: Load a block of Queries (Q) into shared memory (SRAM).</li>
-<li><strong>Loop</strong>: Iterate over blocks of Keys (K) and Values (V) from HBM (Global Memory).
+<h2 id="1-concept-memory-bandwidth"><a class="header" href="#1-concept-memory-bandwidth">1. Concept: Memory Bandwidth</a></h2>
+<p>The main bottleneck in Attention is reading the huge $N \times N$ matrix from memory.
+<strong>Flash Attention</strong> breaks the problem into small “tiles” that fit into the GPU’s fast <strong>SRAM</strong> (Shared Memory). We compute everything for that tile without going back to slow Global Memory.</p>
+<pre><code class="language-mermaid">block-beta
+    columns 3
+    block:GlobalMemory
+        columns 1
+        Q[Matrix Q]
+        K[Matrix K]
+        V[Matrix V]
+    end
+
+    space
+
+    block:SRAM
+        columns 1
+        TileQ[Tile Q]
+        TileK[Tile K]
+        TileV[Tile V]
+        Comp(("Compute"))
+    end
+
+    Q --&gt; TileQ
+    K --&gt; TileK
+    V --&gt; TileV
+</code></pre>
+<hr>
+<h2 id="2-implementation-guide-3"><a class="header" href="#2-implementation-guide-3">2. Implementation Guide</a></h2>
+<p>We will implement a <strong>simplified</strong> version. Doing full FlashAttention v2 is extremely complex. We aim for “Tiled Attention”.</p>
+<h3 id="step-0-the-setup"><a class="header" href="#step-0-the-setup">Step 0: The Setup</a></h3>
+<p>Open <code>src/kernels/cuda/flash_attention.cu</code>.
+Identify the <code>flash_attention_forward</code> function.</p>
+<p>You have pointers to:</p>
 <ul>
-<li>Load K, V block into SRAM.</li>
-<li>Compute QK^T (Attention Scores).</li>
-<li>Apply Softmax (using online softmax scaling).</li>
-<li>Compute Score * V.</li>
-<li>Accumulate result to Output.</li>
+<li><code>query</code> (Q), <code>key</code> (K), <code>value</code> (V) residing in Global Memory.</li>
+</ul>
+<h3 id="step-1-define-thread-layout"><a class="header" href="#step-1-define-thread-layout">Step 1: Define Thread Layout</a></h3>
+<p>We want to process tiles.</p>
+<ul>
+<li><strong>Grid</strong>: One block per query chunk.</li>
+<li><strong>Block</strong>: Threads within the block handle individual heads or elements.</li>
+</ul>
+<pre><code class="language-cpp">// Example
+dim3 grid(num_batches, num_heads);
+dim3 block(128); // 128 threads work together on one head
+</code></pre>
+<h3 id="step-2-load-tiles-to-shared-memory"><a class="header" href="#step-2-load-tiles-to-shared-memory">Step 2: Load Tiles to Shared Memory</a></h3>
+<p>You need <code>__shared__</code> memory arrays.</p>
+<pre><code class="language-cpp">__shared__ float s_Q[TILE_SIZE][HEAD_DIM];
+__shared__ float s_K[TILE_SIZE][HEAD_DIM];
+</code></pre>
+<p>Use <code>threadIdx.x</code> to cooperatively load data from Global <code>Q</code> to Shared <code>s_Q</code>.
+<strong>Remember</strong>: call <code>__syncthreads()</code> after loading!</p>
+<h3 id="step-3-compute-qkt-scores"><a class="header" href="#step-3-compute-qkt-scores">Step 3: Compute $QK^T$ (Scores)</a></h3>
+<p>Iterate over your shared Q and K.
+Calculate the dot product.
+Store in a register (local variable).</p>
+<h3 id="step-4-softmax-the-online-trick"><a class="header" href="#step-4-softmax-the-online-trick">Step 4: Softmax (The “Online” Trick)</a></h3>
+<p>In standard softmax, you need the max of the <em>entire</em> row. Here we only see a tile!
+<strong>Trick</strong>: Keep a running max ($m$) and running sum ($l$). Update them as you see new tiles.</p>
+<ul>
+<li>$m_{new} = \max(m_{old}, \max(current_tile))$</li>
+<li>Adjust previous sums by multiplying by $e^{m_{old} - m_{new}}$.</li>
+</ul>
+<h3 id="step-5-compute-score-times-v"><a class="header" href="#step-5-compute-score-times-v">Step 5: Compute Score $\times$ V</a></h3>
+<p>Once you have the probabilities for the tile, multiply by <code>s_V</code> (which you also loaded).
+Accumulate into <code>output</code>.</p>
+<hr>
+<h2 id="3-hints"><a class="header" href="#3-hints">3. Hints</a></h2>
+<ul>
+<li>Start with a <strong>Naive</strong> kernel first! Forget shared memory. Just loops.
+<ul>
+<li>Thread per query token.</li>
+<li>Loop over all key tokens.</li>
+<li>Compute.</li>
+<li>This is $O(N^2)$ memory reads but verifies your logic is correct.</li>
 </ul>
 </li>
-<li><strong>Write Output</strong>: Store final result to HBM.</li>
-</ol>
-<blockquote>
-<p><strong>Note</strong>: For this educational project, a naive CUDA implementation is acceptable if tiling is too complex.</p>
-</blockquote>
+<li>Only optimize to Shared Memory once logic works.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="paged-attention-kernelscudapaged_attentioncu"><a class="header" href="#paged-attention-kernelscudapaged_attentioncu">Paged Attention (<code>kernels/cuda/paged_attention.cu</code>)</a></h1>
-<h2 id="concept-5"><a class="header" href="#concept-5">Concept</a></h2>
-<p>Compute attention where K and V are stored in non-contiguous blocks.</p>
-<h2 id="implementation-goal-5"><a class="header" href="#implementation-goal-5">Implementation Goal</a></h2>
-<p>Implement <code>paged_attention_kernel</code>:</p>
-<h3 id="inputs"><a class="header" href="#inputs">Inputs</a></h3>
+<h2 id="1-concept-indirection"><a class="header" href="#1-concept-indirection">1. Concept: Indirection</a></h2>
+<p>Paged Attention is just standard attention, but <code>K</code> and <code>V</code> are not contiguous.
+We have to “gather” them using a Page Table.</p>
+<pre><code class="language-mermaid">graph LR
+    Thread --&gt;|1. Get Logical idx| Logic[Token #42]
+    Logic --&gt;|2. Lookup Table| Table[Block 2, Offset 10]
+    Table --&gt;|3. Get Physical Addr| Phys[0xA000...]
+    Phys --&gt;|4. Read| Data[Value]
+</code></pre>
+<hr>
+<h2 id="2-implementation-guide-4"><a class="header" href="#2-implementation-guide-4">2. Implementation Guide</a></h2>
+<h3 id="step-1-understand-the-block-table"><a class="header" href="#step-1-understand-the-block-table">Step 1: Understand the Block Table</a></h3>
+<p>You are passed <code>block_tables</code> tensor of shape <code>[num_seqs, max_blocks]</code>.</p>
 <ul>
-<li><code>block_tables</code>: A tensor mapping <code>[request_id, logical_block_idx] -&gt; physical_block_idx</code>.</li>
+<li>It holds integer indices of physical blocks.</li>
+<li><code>block_tables[req_id][0]</code> is the first block of that request.</li>
 </ul>
-<h3 id="logic-1"><a class="header" href="#logic-1">Logic</a></h3>
+<h3 id="step-2-calculate-physical-address"><a class="header" href="#step-2-calculate-physical-address">Step 2: Calculate Physical Address</a></h3>
+<p>Inside your kernel, you want the Key vector for token <code>t</code> of request <code>r</code>.</p>
+<pre><code class="language-cpp">int block_idx = t / BLOCK_SIZE;
+int block_offset = t % BLOCK_SIZE;
+int physical_block_number = block_tables[r][block_idx];
+
+// Pointer arithmetic
+float* k_ptr = key_cache_base
+             + physical_block_number * (BLOCK_SIZE * HEAD_DIM * NUM_HEADS)
+             + ... // navigate to specific head and offset
+</code></pre>
+<h3 id="step-3-load-data"><a class="header" href="#step-3-load-data">Step 3: Load Data</a></h3>
+<p>Using the pointer <code>k_ptr</code>, load the vector into registers or shared memory.</p>
+<h3 id="step-4-compute-attention"><a class="header" href="#step-4-compute-attention">Step 4: Compute Attention</a></h3>
+<p>Once loaded, the math is identical to standard Attention or Flash Attention.
+$Q \cdot K^T$, Softmax, $\cdot V$.</p>
+<hr>
+<h2 id="3-your-task"><a class="header" href="#3-your-task">3. Your Task</a></h2>
+<p>Implement <code>paged_attention_kernel</code> in <code>src/kernels/cuda/paged_attention.cu</code>.</p>
 <ol>
-<li><strong>Thread Mapping</strong>: Each thread block handles one sequence (request).</li>
-<li><strong>Gathering</strong>:
-<ul>
-<li>Instead of <code>K[i]</code>, we must compute the physical address.</li>
-<li><code>block_number = block_tables[request_id][token_index / block_size]</code></li>
-<li><code>block_offset = token_index % block_size</code></li>
-<li><code>physical_addr = base_ptr + block_number * stride + block_offset</code></li>
-</ul>
-</li>
-<li><strong>Attention</strong>:
-<ul>
-<li>Load K, V using the calculated physical addresses.</li>
-<li>Compute Attention as usual.</li>
-</ul>
-</li>
+<li>Focus on the <strong>address calculation</strong> logic. That is the only difference!</li>
+<li>Use the <code>copy_blocks</code> kernel (Memory Ops) to help set up test data if needed.</li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="radix-operations-kernelscudaradix_opscu"><a class="header" href="#radix-operations-kernelscudaradix_opscu">Radix Operations (<code>kernels/cuda/radix_ops.cu</code>)</a></h1>
-<h2 id="concept-6"><a class="header" href="#concept-6">Concept</a></h2>
+<h2 id="concept-1"><a class="header" href="#concept-1">Concept</a></h2>
 <p>If we have a Radix Tree, we can optimize attention even further by knowing exactly which tokens are shared.</p>
-<h2 id="implementation-goal-6"><a class="header" href="#implementation-goal-6">Implementation Goal</a></h2>
+<h2 id="implementation-goal-1"><a class="header" href="#implementation-goal-1">Implementation Goal</a></h2>
 <p>This is an advanced extension.</p>
-<h3 id="logic-2"><a class="header" href="#logic-2">Logic</a></h3>
+<h3 id="logic-1"><a class="header" href="#logic-1">Logic</a></h3>
 <ol>
 <li><strong>Tree Traversal on GPU</strong>: Mapping the Radix Tree structure to a GPU-friendly format (e.g., flattened arrays).</li>
 <li><strong>Prefix Matching</strong>: A kernel that takes a batch of prompts and quickly identifies the longest common prefix node ID for each.</li>

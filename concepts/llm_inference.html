@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cbd8f59e.js";
+            window.path_to_searchindex_js = "../searchindex-f4284004.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-676105c4.js"></script>
@@ -186,6 +186,29 @@
 <li><strong>Output</strong>: The KV (Key-Value) cache for the prompt and the first generated token.</li>
 <li><strong>Characteristic</strong>: Compute-bound. We maximize parallelism here.</li>
 </ul>
+<h2 id="the-process-visualized"><a class="header" href="#the-process-visualized">The Process Visualized</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant U as User
+    participant E as Engine
+    participant M as Model
+
+    rect rgb(200, 220, 255)
+    note right of U: Prefill Phase (Parallel)
+    U-&gt;&gt;E: Prompt: "A B C"
+    E-&gt;&gt;M: Forward(["A", "B", "C"])
+    M--&gt;&gt;E: KV Cache + Logits(C)
+    end
+
+    rect rgb(220, 255, 200)
+    note right of U: Decode Phase (Serial)
+    loop Until EOS
+        E-&gt;&gt;M: Forward([Last Token])
+        M--&gt;&gt;E: Update KV + Logits
+        E-&gt;&gt;E: Sample Next Token
+    end
+    end
+    E-&gt;&gt;U: Response
+</code></pre>
 <h2 id="2-decode-phase-the-generation"><a class="header" href="#2-decode-phase-the-generation">2. Decode Phase (The “Generation”)</a></h2>
 <ul>
 <li><strong>Input</strong>: The previously generated token.</li>

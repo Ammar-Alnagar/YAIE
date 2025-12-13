@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cbd8f59e.js";
+            window.path_to_searchindex_js = "../searchindex-f4284004.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-676105c4.js"></script>
@@ -192,6 +192,15 @@ prefix_hash = sha256(prompt)
 <li><strong>Prioritize Decode</strong>: To minimize latency, we always try to run pending decode steps first.</li>
 <li><strong>Fill with Prefill</strong>: If there is leftover GPU memory (or batch size capacity), we pull new requests from the queue for prefill.</li>
 </ol>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; Pending
+    Pending --&gt; RunningPrefill : schedule_step()
+    RunningPrefill --&gt; ScheduledDecode : process_prefill()
+    ScheduledDecode --&gt; RunningDecode : schedule_step()
+    RunningDecode --&gt; ScheduledDecode : Not Finished
+    RunningDecode --&gt; Completed : Finished
+    Completed --&gt; [*]
+</code></pre>
 <h2 id="state-machine"><a class="header" href="#state-machine">State Machine</a></h2>
 <p>Requests transition through states:
 <code>PENDING</code> -&gt; <code>RUNNING_PREFILL</code> -&gt; <code>SCHEDULED_DECODE</code> -&gt; <code>RUNNING_DECODE</code> -&gt; <code>COMPLETED</code></p>

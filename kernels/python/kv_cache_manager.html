@@ -35,7 +35,7 @@
             const path_to_root = "../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../searchindex-cbd8f59e.js";
+            window.path_to_searchindex_js = "../../searchindex-f4284004.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../../toc-676105c4.js"></script>
@@ -178,28 +178,79 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="kv-cache-manager-kernelskv_cachepy"><a class="header" href="#kv-cache-manager-kernelskv_cachepy">KV Cache Manager (<code>kernels/kv_cache.py</code>)</a></h1>
-<h2 id="concept"><a class="header" href="#concept">Concept</a></h2>
-<p>Manage a pool of fixed-size integer IDs representing GPU memory blocks.</p>
-<h2 id="implementation-goal"><a class="header" href="#implementation-goal">Implementation Goal</a></h2>
-<p>Implement <code>KVCacheManager</code>:</p>
-<h3 id="1-__init__"><a class="header" href="#1-__init__">1. <code>__init__</code></a></h3>
+<h2 id="1-concept-paged-attention"><a class="header" href="#1-concept-paged-attention">1. Concept: Paged Attention</a></h2>
+<p>In a standard implementation, KV Cache is a huge contiguous tensor <code>[MAX_SEQ_LEN, HEADS, DIM]</code>. This wastes memory because most prompts are shorter than <code>MAX_SEQ_LEN</code>.</p>
+<p><strong>Paged Attention</strong> breaks this tensor into small fixed-size blocks (e.g., size 16).</p>
 <ul>
-<li>Create a list of all available block indices: <code>free_blocks = [0, 1, ..., N-1]</code>.</li>
-<li>Initialize an empty mapping <code>request_to_blocks = {}</code>.</li>
+<li><strong>Physical Memory</strong>: A big pool of blocks <code>[NUM_BLOCKS, 16, HEADS, DIM]</code>.</li>
+<li><strong>Logical Memory</strong>: For each request, we just keep a list of block indices <code>[0, 5, 12]</code>.</li>
 </ul>
-<h3 id="2-allocaterequest-num_tokens"><a class="header" href="#2-allocaterequest-num_tokens">2. <code>allocate(request, num_tokens)</code></a></h3>
+<p>Your job is to write the <strong>Allocator</strong> (like <code>malloc</code> in C).</p>
+<hr>
+<h2 id="2-implementation-guide"><a class="header" href="#2-implementation-guide">2. Implementation Guide</a></h2>
+<p>Open <code>src/kernels/kv_cache.py</code>.</p>
+<h3 id="step-1-initialization"><a class="header" href="#step-1-initialization">Step 1: Initialization</a></h3>
+<p>We need to track which blocks are free and which are used.</p>
+<p><strong>Task</strong>: In <code>__init__</code>:</p>
+<ol>
+<li>Create a list <code>self.free_blocks</code>. Initially, it should contain <em>all</em> integers from <code>0</code> to <code>num_blocks - 1</code>.</li>
+<li>Create a dictionary <code>self.block_tables</code>. This will map <code>request_id -&gt; List[int]</code> (the list of blocks owned by that request).</li>
+</ol>
+<pre><code class="language-python"># Hint
+self.free_blocks = list(range(num_blocks))
+</code></pre>
+<hr>
+<h3 id="step-2-the-allocate_blocks-method"><a class="header" href="#step-2-the-allocate_blocks-method">Step 2: The <code>allocate_blocks</code> Method</a></h3>
+<p>When a request comes in (or generates new tokens), it needs memory.</p>
+<p><strong>Signature</strong>:</p>
+<pre><code class="language-python">def allocate_blocks(self, request_id: str, num_tokens: int) -&gt; List[int]:
+</code></pre>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li>Calculate how many blocks are needed.
 <ul>
-<li>Calculate blocks needed: <code>ceil(num_tokens / block_size)</code>.</li>
-<li>Pop that many indices from <code>free_blocks</code>.</li>
-<li>Store them in <code>request_to_blocks</code>.</li>
-<li><strong>Edge Case</strong>: If not enough blocks, raise OutOfMemory (or trigger eviction).</li>
+<li>$N_{blocks} = \lceil num_tokens / block_size \rceil$</li>
 </ul>
-<h3 id="3-freerequest"><a class="header" href="#3-freerequest">3. <code>free(request)</code></a></h3>
+</li>
+<li>Check if we have enough <code>free_blocks</code>.
 <ul>
-<li>Retrieve the blocks owned by the request.</li>
-<li>Append them back to <code>free_blocks</code>.</li>
-<li>Delete the request mapping.</li>
+<li>If <code>len(free_blocks) &lt; needed</code>, raise an Error (or handle OOM).</li>
 </ul>
+</li>
+<li><strong>Pop</strong> the blocks from <code>free_blocks</code>.</li>
+<li><strong>Assign</strong> them to <code>self.block_tables[request_id]</code>.</li>
+<li>Return the list of allocated block indices.</li>
+</ol>
+<p><strong>Your Turn</strong>: Implement this logic. Watch out for integer division!</p>
+<hr>
+<h3 id="step-3-the-free_blocks-method"><a class="header" href="#step-3-the-free_blocks-method">Step 3: The <code>free_blocks</code> Method</a></h3>
+<p>When a request finishes, we must reclaim memory.</p>
+<p><strong>Algorithm</strong>:</p>
+<ol>
+<li>Look up the blocks for <code>request_id</code>.</li>
+<li><strong>Append</strong> them back to <code>self.free_blocks</code>.</li>
+<li>Delete the entry from <code>self.block_tables</code>.</li>
+</ol>
+<p><strong>Critical</strong>: Do not double-free! (Though Python sets make this easier, a list is faster for standard stacks).</p>
+<hr>
+<h3 id="step-4-connecting-to-the-engine"><a class="header" href="#step-4-connecting-to-the-engine">Step 4: Connecting to the Engine</a></h3>
+<p>The <code>get_kv_tensors</code> method is checking if you can translate the “Logical” view to the “Physical” view.</p>
+<p><strong>Task</strong>: Implement <code>get_kv_tensors</code>.</p>
+<ul>
+<li>It should presumably return the specific GPU tensors for the blocks.</li>
+<li><em>Note</em>: In this Python simulation, just returning the indices is often enough for the Scheduler to know mapping. The actual <em>Tensor</em> access happens in the CUDA kernel.</li>
+</ul>
+<hr>
+<h3 id="step-5-verify"><a class="header" href="#step-5-verify">Step 5: Verify</a></h3>
+<p>Create <code>tests/test_kv_manual.py</code>:</p>
+<pre><code class="language-python">manager = KVCacheManager(num_blocks=10, block_size=16, ...)
+# Alloc 20 tokens -&gt; needs 2 blocks (indices 0, 1)
+blocks = manager.allocate_blocks("req1", 20)
+print(blocks)
+# Free
+manager.free_blocks("req1")
+print(len(manager.free_blocks)) # Should be 10 again
+</code></pre>
 
                     </main>
 
