@@ -11,7 +11,7 @@ YAIE (Yet Another Inference Engine) is an educational project designed to help s
 ## Table of Contents
 - [Overview](#overview)
 - [Features](#features)
-- [Architecture](#architecture)
+<!--- [Architecture](#architecture)-->
 - [Installation](#installation)
 - [Usage](#usage)
 - [Learning Objectives](#learning-objectives)

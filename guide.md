@@ -1,228 +1,282 @@
-# YAIE Kernels Implementation Guide
+# Mini-YAIE Kernels Implementation Guide
 
-This document outlines all the kernels that need to be implemented in the YAIE inference engine. Each section describes what the kernel does, why it's important, and implementation guidance.
+This document outlines the kernels that need to be implemented in the Mini-YAIE inference engine, following SGLang architecture and concepts. Each section describes what the kernel does, why it's important, and implementation guidance.
 
-## 1. Attention Kernels
+## 1. Radix Attention Kernels (SGLang Core)
 
-### 1.1 FlashAttention Forward Pass
-- **File**: `src/kernels/cuda_kernels.py`
-- **Function**: `flash_attention_forward(q, k, v, causal_mask=None)`
-- **Purpose**: Efficient attention computation with reduced memory complexity
-- **Implementation Notes**:
-  - Standard attention has O(n²) memory complexity, FlashAttention has O(n)
-  - Uses tiling and recalculation to avoid storing large attention matrices
-  - Critical for processing long sequences efficiently
-- **Prerequisites**: Understanding of attention mechanism and CUDA programming
+### 1.1 RadixAttentionBlock
 
-### 1.2 FlashAttention Backward Pass
-- **File**: `src/kernels/cuda_kernels.py`
-- **Function**: `flash_attention_backward(dout, q, k, v, output)`
-- **Purpose**: Gradient computation for FlashAttention (needed for training, optional for inference)
-- **Implementation Notes**:
-  - Must mirror the forward pass computation
-  - Handle gradient flow properly
-- **Note**: For pure inference, this may not be required
+**Purpose**: SGLang's radial attention mechanism with prefix sharing for efficient batch processing of requests with common prefixes.
 
-### 1.3 Paged Attention
-- **File**: `src/kernels/cuda_kernels.py`
-- **Function**: `paged_attention_forward(q, k_cache, v_cache, block_tables, context_lens, max_context_len)`
-- **Purpose**: Efficient KV-cache management using paging
-- **Implementation Notes**:
-  - Allows variable-length sequences in the same batch
-  - Reduces memory fragmentation compared to contiguous cache
-  - Key to supporting continuous batching efficiently
-  - Uses block tables to map sequence positions to memory blocks
+**How it Works**:
+- Represents request prefixes as a tree structure (radix tree)
+- Shares computation for requests with common prefixes
+- Reduces redundant computation in continuous batching scenarios
 
-## 2. Radix Attention Kernels
+**Visual Representation**:
 
-### 2.1 Radix Attention Block
-- **File**: `src/kernels/radix_attention.py`
-- **Class**: `RadixAttentionBlock`
-- **Purpose**: Implementation of radial attention with prefix sharing inspired by SGLang
-- **Implementation Notes**:
-  - Efficiently shares computation for requests with common prefixes
-  - Key to achieving high throughput in continuous batching
-  - Should integrate with paged KV-cache for memory efficiency
-  - Must handle varying sequence lengths in batches
+```
+Radix Tree Structure:
+                Root
+               /    \
+              A      B        <- First token: requests 1,2 have 'A', request 3 has 'B'
+             / \    /   \
+            C   D  E     F    <- Second token: requests 1,2 split, requests 3,4 split
+           /   /   |     |
+          G   H    I     J   <- Third token: continue branching
 
-### 2.2 Radix Attention with Paged KV-Cache
-- **File**: `src/kernels/radix_attention.py`
-- **Class**: `RadixAttentionWithPagedKVCache`
-- **Purpose**: Radial attention with integrated paged KV-cache management
-- **Implementation Notes**:
-  - Combines radial attention with memory-efficient paging
-  - Manages block allocation for different requests
-  - Handles block sharing between requests with common prefixes
-  - Critical for memory-efficient prefix sharing
+Computation Sharing:
+- Tokens A and C are computed once for requests 1 and 2
+- Tokens D and H are computed separately for request 2
+- This reduces total computation compared to separate processing
+```
 
-## 3. FlashInfer-Style Kernels
+**Implementation Steps**:
+1. Parse input requests to identify common prefixes
+2. Build radix tree structure from shared prefixes
+3. Implement forward pass that computes shared nodes once
+4. Implement backward pass for gradient computation
+5. Handle KV-cache management for shared computation
 
-### 3.1 FlashInfer Attention
-- **File**: `src/kernels/flashinfer.py`
-- **Class**: `FlashInferAttention`
-- **Purpose**: Optimized attention implementation following FlashInfer's approach
-- **Implementation Notes**:
-  - Optimized differently for prefill and decode phases
-  - Focuses on memory bandwidth efficiency
-  - Designed for both dense and potentially sparse attention patterns
-  - High-performance implementation for generation workloads
+**Code Structure**:
+```python
+class RadixAttentionBlock(nn.Module):
+    def __init__(self, hidden_size, num_heads, head_dim, max_position_embeddings):
+        # Initialize query/key/value projections
+        # Initialize rotary embedding components
+        # Initialize radix tree management utilities
+    
+    def forward(self, hidden_states, radix_tree_info, attention_mask, position_ids):
+        # Step 1: Apply QKV projections
+        # Step 2: Apply RoPE embeddings
+        # Step 3: Use radix tree to identify shared computation
+        # Step 4: Compute attention for shared vs. unique parts
+        # Step 5: Manage KV-cache for next iteration
+```
 
-### 3.2 FlashInfer Paged Attention
-- **File**: `src/kernels/flashinfer.py`
-- **Class**: `FlashInferPagedAttention`
-- **Purpose**: Paged attention optimized following FlashInfer's methodology
-- **Implementation Notes**:
-  - Memory layout optimized for GPU access patterns
-  - Efficient page lookup mechanisms
-  - Specialized for variable-length sequence handling
-  - Optimized for batched inference scenarios
+**Why it's Important**:
+- Dramatically reduces redundant computation in continuous batching
+- Enables efficient processing of multiple requests with similar prefixes
+- Core to SGLang's performance advantages
+
+### 1.2 RadixAttentionWithPagedKVCache
+
+**Purpose**: Radix attention combined with paged KV-cache management for memory efficiency.
+
+**How it Works**:
+- Combines radix attention with efficient KV-cache paging
+- Manages shared KV-cache blocks for requests with common prefixes
+- Reduces memory usage while maintaining computation sharing benefits
+
+**Visual Representation**:
+
+```
+Paged KV Cache with Radix Tree:
+Radix Tree:
+    Root -> Token A -> Token C -> Token G
+                     -> Token D -> Token H
+
+Paged Memory:
+Physical Blocks: [Blk1][Blk2][Blk3][Blk4][Blk5][...]
+                 [KV_A][KV_C][KV_D][KV_G][KV_H]
+
+Block Table for Shared Computation:
+- Root->A: Blk1 (shared by multiple requests)
+- A->C: Blk2 (shared by requests with prefix "AC")
+- A->D: Blk3 (used by requests with prefix "AD")  
+- C->G: Blk4 (specific to request with prefix "ACG")
+- D->H: Blk5 (specific to request with prefix "ADH")
+```
+
+**Implementation Steps**:
+1. Implement paged memory allocator for KV-cache
+2. Create block reference counting for shared prefixes
+3. Handle block allocation/deallocation based on radix tree
+4. Implement efficient block lookup during attention computation
+5. Add memory management policies for cache eviction
+
+## 2. SGLang-Style Prefill & Decode Optimization
+
+### 2.1 Chunked Prefill
+
+**Purpose**: Efficiently process long initial prompts using chunked processing to reduce memory usage.
+
+**How it Works**:
+- Splits long prompts into smaller chunks
+- Processes chunks efficiently without materializing full attention
+- Reduces peak memory usage during prefill phase
+
+**Visual Representation**:
+
+```
+Long Prompt (1000 tokens):
+Input: [T1, T2, T3, ..., T1000]
+
+Traditional Prefill:
+- All 1000x1000 attention matrix: O(1000²) memory
+- Peak memory usage: Very high
+
+Chunked Prefill:
+- Split into 10 chunks of 100 tokens each
+- Process: [T1-T100], [T101-T200], ..., [T901-T1000]
+- Each chunk: 100x100 attention: O(100²) memory
+- Cache intermediate KV states between chunks
+- Combine results efficiently
+```
+
+**Implementation Steps**:
+1. Implement chunking logic for long prompts
+2. Maintain KV-cache across chunks
+3. Handle cross-chunk attention efficiently
+4. Optimize memory allocation for chunked processing
+
+### 2.2 Decode Phase Optimization
+
+**Purpose**: Optimize single-token generation phase for maximum throughput.
+
+**How it Works**:
+- Process one token at a time (current position only)
+- Efficiently retrieve from paged KV-cache
+- Minimize memory access for best performance
+
+**Implementation Steps**:
+1. Implement single-token attention computation
+2. Optimize KV-cache retrieval from paged memory
+3. Handle batched decode requests efficiently
+4. Optimize for GPU memory access patterns
+
+## 3. Memory Management Kernels
+
+### 3.1 Page-Based KV Cache Management
+
+**Purpose**: Efficient memory management for KV-cache using page-based allocation.
+
+**How it Works**:
+- KV-cache stored in fixed-size pages
+- Each request references required pages through block table
+- Reduces memory fragmentation compared to contiguous allocation
+
+**Visual Representation**:
+
+```
+Memory Layout - Page-based:
+Global Page Pool (GPU Memory):
+┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐
+│Page0│Page1│Page2│Page3│Page4│Page5│Page6│ ... │
+└─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘
+
+Request 1 (tokens 0-150): [Page0, Page1] (0-63, 64-127 in Page0, 128-150 in Page1)  
+Request 2 (tokens 0-80):  [Page2, Page4] (non-contiguous but efficient)
+Request 3 (tokens 0-200): [Page3, Page5, Page6, ...]
+
+Block Table per Request:
+Request 1: [0, 1]  (maps to Page0, Page1)
+Request 2: [2, 4]  (maps to Page2, Page4) 
+Request 3: [3, 5, 6, ...] (maps to Page3, Page5, Page6, ...)
+```
+
+**Implementation Steps**:
+1. Implement fixed-size page allocator
+2. Create block table management system
+3. Handle page allocation and deallocation efficiently
+4. Implement page swapping for memory-constrained scenarios
+
+### 3.2 Radix Tree Management
+
+**Purpose**: Efficient management of radix trees for tracking request prefixes.
+
+**How it Works**:
+- Maintains tree structure of shared prefixes
+- Enables efficient lookup during request processing
+- Manages tree updates when requests progress
+
+**Implementation Steps**:
+1. Implement radix tree node structure
+2. Create efficient insertion/deletion methods
+3. Handle tree balancing and optimization
+4. Implement cache for frequently accessed paths
 
 ## 4. Position Embedding Kernels
 
-### 4.1 RoPE (Rotary Position Embedding)
-- **File**: `src/kernels/cuda_kernels.py`
-- **Function**: `apply_rope_qk(q, k, cos, sin, position_ids)`
-- **Purpose**: Apply rotary embeddings to query and key tensors
-- **Implementation Notes**:
-  - Many modern models (LLaMA, etc.) use RoPE instead of absolute position embeddings
-  - Involves rotating query and key vectors based on position
-  - Critical for understanding token positions/relationships
+### 4.1 RoPE with Radix Attention
 
-## 5. Normalization Kernels
+**Purpose**: Apply rotary embeddings efficiently in the context of radix attention.
 
-### 5.1 RMS Normalization
-- **File**: `src/kernels/cuda_kernels.py`
-- **Function**: `rms_norm(input_tensor, weight, epsilon=1e-6)`
-- **Purpose**: Root Mean Square normalization used in many transformer models
-- **Implementation Notes**:
-  - More efficient than LayerNorm
-  - Common in models like LLaMA
-  - Requires computing RMS and applying learnable weights
+**How it Works**:
+- Compute RoPE for each token position
+- Apply embeddings considering shared computation paths
+- Optimize for both shared and unique prefix computations
 
-## 6. Activation Kernels
+**Implementation Steps**:
+1. Precompute RoPE embeddings for all possible positions
+2. Apply embeddings based on actual token positions in radix tree
+3. Handle position ID management for shared prefixes
+4. Optimize for GPU computation patterns
 
-### 6.1 SiLU and Multiplication (SwiGLU component)
-- **File**: `src/kernels/cuda_kernels.py`
-- **Function**: `silu_and_mul(input_tensor)`
-- **Purpose**: Fused activation function used in SwiGLU (in some models)
-- **Implementation Notes**:
-  - Separates input into two halves: applies SiLU to first half
-  - Multiplies first half with second half
-  - Fused kernel is more efficient than separate operations
+## 5. SGLang-Specific Optimizations
 
-## 7. CPU Fallback Kernels
+### 5.1 Multi-Step Attention
 
-### 7.1 CPU Attention
-- **File**: `src/kernels/cpu_kernels.py`
-- **Function**: `cpu_attention_forward(q, k, v, mask=None)`
-- **Purpose**: CPU implementation of attention for fallback when GPU unavailable
-- **Implementation Notes**:
-  - Simpler implementation than FlashAttention
-  - Standard matrix operations with attention masking
-  - Optimized for CPU cache efficiency
+**Purpose**: Process multiple decoding steps in a single kernel call for efficiency.
 
-### 7.2 CPU RMS Normalization
-- **File**: `src/kernels/cpu_kernels.py`
-- **Function**: `cpu_rms_norm(input_tensor, weight, epsilon=1e-6)`
-- **Purpose**: CPU implementation of RMS normalization
-- **Implementation Notes**:
-  - Same algorithm as GPU version but optimized for CPU
-  - Consider SIMD instructions for better performance
+**How it Works**:
+- Instead of single-step decoding, process multiple steps
+- Reduces kernel launch overhead
+- Improves GPU utilization
 
-### 7.3 CPU RoPE
-- **File**: `src/kernels/cpu_kernels.py`
-- **Function**: `cpu_rope_embeddings(input_tensor, cos, sin, position_ids)`
-- **Purpose**: CPU implementation of RoPE
-- **Implementation Notes**:
-  - Same algorithm as GPU version but with CPU optimizations
+**Implementation Steps**:
+1. Implement multi-step processing logic
+2. Manage KV-cache updates across multiple steps
+3. Handle stopping conditions within multi-step execution
+4. Balance performance gains with memory requirements
 
-## 8. KV-Cache Management
+### 5.2 Request Scheduling with Radix
 
-### 8.1 KVCacheBlock
-- **File**: `src/kernels/kv_cache.py`
-- **Class**: `KVCacheBlock`
-- **Purpose**: Represents a single memory block in the paged KV-cache
-- **Implementation Notes**:
-  - Manages allocation and deallocation of GPU memory
-  - Stores key and value tensors for a fixed number of tokens
-  - Must handle different data types (float16, bfloat16, etc.)
+**Purpose**: Optimize request scheduling based on radix tree structure.
 
-### 8.2 KVCacheManager
-- **File**: `src/kernels/kv_cache.py`
-- **Class**: `KVCacheManager`
-- **Purpose**: Manages the entire paged KV-cache system
-- **Implementation Notes**:
-  - Tracks which blocks are free/allocated
-  - Manages block allocation/deallocation for requests
-  - Handles block copying for operations like beam search
-  - Implements memory management policies
+**How it Works**:
+- Schedule requests with common prefixes together
+- Maximize computation sharing opportunities
+- Balance between sharing benefits and scheduling efficiency
 
-## 9. Memory Management Kernels (Advanced)
+**Implementation Steps**:
+1. Analyze radix tree structure for scheduling opportunities
+2. Implement efficient batch formation logic
+3. Handle request preemption and rescheduling
+4. Optimize for throughput and latency trade-offs
 
-### 9.1 Memory Pool Management
-- **File**: `src/kernels/cuda_kernels.py`
-- **Function**: `memory_pool_allocate(size)`, `memory_pool_free(ptr)`
-- **Purpose**: Efficient GPU memory allocation/deallocation
-- **Implementation Notes**:
-  - Avoids costly CUDA malloc/free operations during inference
-  - Pre-allocates large chunks of GPU memory
-  - Manages internal bookkeeping of available memory
-- **Note**: Implement after basic kernels working
+## Implementation Order Recommendation (SGLang Focus)
 
-### 9.2 Block Swapping (For Memory Constraints)
-- **File**: `src/kernels/kv_cache.py`
-- **Function**: `swap_blocks_to_cpu(block_ids)`, `swap_blocks_from_cpu(block_ids)`
-- **Purpose**: Move blocks between GPU and CPU when GPU memory is full
-- **Implementation Notes**:
-  - Advanced feature for systems with limited GPU memory
-  - Introduces latency but allows processing longer contexts
-- **Note**: Implement after basic paged attention working
+1. **Start with core radix components**:
+   - Radix tree data structure
+   - Basic KV-cache management
+   - Simple attention (without radix sharing initially)
 
-## Implementation Order Recommendation
+2. **Implement radix attention fundamentals**:
+   - RadixAttentionBlock with basic sharing
+   - Paged KV-cache integration
+   - Position embedding with radix support
 
-1. **Start with basic kernels**:
-   - CPU implementations first (easier to debug)
-   - RMS normalization
-   - Basic attention
-   - RoPE
+3. **Add optimization layers**:
+   - Chunked prefill for long prompts
+   - Multi-step decoding
+   - Advanced memory management
 
-2. **Move to GPU implementations**:
-   - RMS normalization (GPU)
-   - RoPE (GPU)
-   - Basic attention (GPU)
+4. **Fine-tune for SGLang patterns**:
+   - Request scheduling with prefix awareness
+   - Performance optimization for common use cases
+   - Integration with the engine scheduler
 
-3. **Implement KV-cache management**:
-   - KVCacheBlock
-   - KVCacheManager
-   - Basic paged attention
+## Testing Strategy for SGLang Kernels
 
-4. **Add radial and FlashInfer attention**:
-   - RadixAttentionBlock
-   - RadixAttentionWithPagedKVCache
-   - FlashInferAttention
-   - FlashInferPagedAttention
+1. **Test radix sharing correctness**: Verify that shared computation produces identical results to separate computation
+2. **Benchmark memory efficiency**: Measure memory savings from prefix sharing and paged cache
+3. **Validate performance gains**: Compare throughput with naive batching approaches
+4. **Integration testing**: Ensure kernels work with the full engine pipeline
 
-5. **Optimize with advanced kernels**:
-   - FlashAttention
-   - SiLU and Mul fusion
-   - Memory pooling
+## Resources for SGLang Implementation
 
-6. **Advanced features** (optional):
-   - Block swapping
-   - More complex attention variants
-
-## Testing Strategy
-
-1. **Unit tests for each kernel** with simple inputs and expected outputs
-2. **Compare results** against PyTorch implementations to verify correctness
-3. **Benchmark performance** to ensure efficiency improvements
-4. **Integration tests** to ensure kernels work together in the full inference pipeline
-
-## Resources for Implementation
-
-- FlashAttention paper: https://arxiv.org/abs/2205.14135
-- PagedAttention paper: https://arxiv.org/abs/2309.06180 (vLLM)
-- SGLang paper: https://arxiv.org/abs/2308.07561 (RadixAttention)
-- FlashInfer: https://github.com/flashinfer-ai/flashinfer
-- CUDA programming guide: https://docs.nvidia.com/cuda/cuda-c-programming-guide/
-- Triton tutorials: https://triton-lang.org/main/getting-started/tutorials/
+- SGLang paper: https://arxiv.org/abs/2308.07561
+- SGLang GitHub: https://github.com/sgl-project/sglang
+- Efficient memory management techniques
+- Radix tree data structure implementations

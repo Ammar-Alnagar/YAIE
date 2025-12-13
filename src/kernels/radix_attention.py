@@ -14,6 +14,7 @@ class RadixAttentionBlock(nn.Module):
     A single block of Radix Attention
     TODO: Implement the radial attention mechanism with prefix sharing
     """
+
     def __init__(
         self,
         hidden_size: int,

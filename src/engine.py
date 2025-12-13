@@ -1,10 +1,11 @@
-from transformers import AutoTokenizer, PreTrainedTokenizer
-from typing import Optional, List, Dict, Any
-import torch
+from typing import Any, Dict, List, Optional
 
-from .models.loader import ModelLoader
+import torch
+from transformers import AutoTokenizer, PreTrainedTokenizer
+
 from .core.scheduler import Scheduler
-from .core.attention import RadixAttention
+from .kernels.radix_attention import RadixAttentionWithPagedKVCache
+from .models.loader import ModelLoader
 
 
 class InferenceEngine:
@@ -28,8 +29,13 @@ class InferenceEngine:
         # Initialize the scheduler for continuous batching
         self.scheduler = Scheduler()
 
-        # Initialize radial attention mechanism
-        self.radix_attention = RadixAttention()
+        # Initialize SGLang-style radial attention with paged KV-cache
+        self.radix_attention = RadixAttentionWithPagedKVCache(
+            num_layers=self.model.config.num_hidden_layers,
+            num_heads=self.model.config.num_attention_heads,
+            head_dim=self.model.config.hidden_size
+            // self.model.config.num_attention_heads,
+        )
 
         # TODO: Initialize other engine components like memory management,
         # GPU memory pool, request queue processing, etc.
@@ -66,10 +72,13 @@ class InferenceEngine:
         # 2. Schedule the requests using the Scheduler
         # 3. Process the scheduled requests through the model
         # 4. Apply radial attention for efficient KV-cache management
-        # 5. Decode the outputs back to text
-        raise NotImplementedError("Generation logic not yet implemented - this is an exercise for the learner")
+        raise NotImplementedError(
+            "Generation logic not yet implemented - this is an exercise for the learner"
+        )
 
-    def chat_completion(self, messages: List[Dict[str, str]], **kwargs) -> Dict[str, Any]:
+    def chat_completion(
+        self, messages: List[Dict[str, str]], **kwargs
+    ) -> Dict[str, Any]:
         """
         Handle chat completion requests (OpenAI compatible format)
 
@@ -85,4 +94,9 @@ class InferenceEngine:
         # 2. Apply any conversation templates if needed
         # 3. Call the generate method
         # 4. Format response in OpenAI-compatible format
-        raise NotImplementedError("Chat completion logic not yet implemented - this is an exercise for the learner")
+        raise NotImplementedError(
+            "Chat completion logic not yet implemented - this is an exercise for the learner"
+        )
+        raise NotImplementedError(
+            "Chat completion logic not yet implemented - this is an exercise for the learner"
+        )

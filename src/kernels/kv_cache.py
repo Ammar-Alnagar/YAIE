@@ -10,6 +10,7 @@ import torch
 
 class KVCacheBlock:
     """Represents a single block in the paged KV-cache"""
+
     def __init__(
         self,
         block_id: int,
