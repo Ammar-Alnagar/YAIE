@@ -1,3 +1,9 @@
+<div align="center">
+  <img src="logo.png" alt="YAIE Logo" width="200" height="200">
+
+  <!-- Note: Add your logo to the logo.png file in this directory -->
+</div>
+
 # YAIE: Educational LLM Inference Engine
 
 YAIE (Yet Another Inference Engine) is an educational project designed to help students and developers understand how modern LLM inference engines work. This implementation is inspired by state-of-the-art systems like SGLang, vLLM, FlashInfer and other efficient inference engines, focusing on continuous batching, radial attention, and FlashInfer-style optimizations.
