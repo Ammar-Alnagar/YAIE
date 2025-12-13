@@ -1,3 +1,4 @@
+from typing import Optional
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 from huggingface_hub import snapshot_download
 import os

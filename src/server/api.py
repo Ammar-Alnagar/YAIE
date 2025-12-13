@@ -54,16 +54,25 @@ def create_app(model_name: str) -> FastAPI:
     @app.post("/v1/chat/completions")
     async def chat_completions(request: ChatCompletionRequest):
         try:
-            # TODO: Implement the chat completion logic using the inference engine
-            # This should handle continuous batching and generate responses appropriately
-            # 1. Convert incoming request to the format expected by the engine
-            # 2. Pass to the engine for processing
-            # 3. Format the response in OpenAI-compatible format
-            # 4. Handle streaming if requested
-
-            raise NotImplementedError(
-                "Chat completions endpoint not yet implemented - this is an exercise for the learner"
-            )
+            # Convert Pydantic models to dicts for the engine
+            messages_dicts = [
+                {"role": msg.role, "content": msg.content} 
+                for msg in request.messages
+            ]
+            
+            # Call engine
+            # We pass relevant parameters from request
+            kwargs = {}
+            if request.max_tokens is not None:
+                kwargs["max_tokens"] = request.max_tokens
+            if request.temperature is not None:
+                kwargs["temperature"] = request.temperature
+            if request.top_p is not None:
+                kwargs["top_p"] = request.top_p
+                
+            response = engine.chat_completion(messages_dicts, **kwargs)
+            
+            return response
 
         except Exception as e:
             traceback.print_exc()
@@ -74,7 +83,19 @@ def create_app(model_name: str) -> FastAPI:
         # Return the loaded model information
         return {
             "object": "list",
-            "data": [{"id": model_name, "object": "model", "owned_by": "user"}],
+            "data": [
+                {
+                    "id": model_name,
+                    "object": "model",
+                    "owned_by": "user",
+                    "created": int(time.time()),
+                }
+            ],
         }
+
+    @app.get("/health")
+    async def health_check():
+        # Simple health check endpoint
+        return {"status": "healthy", "model": model_name}
 
     return app

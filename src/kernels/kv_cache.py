@@ -115,7 +115,6 @@ class KVCacheManager:
     def get_kv_tensors(
         self, block_ids: List[int], seq_lens: List[int]
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-    def get_kv_tensors(self, block_ids: List[int], seq_lens: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Get key and value tensors for a list of block IDs
 

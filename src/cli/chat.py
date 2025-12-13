@@ -1,4 +1,7 @@
-from ..engine import InferenceEngine
+try:
+    from engine import InferenceEngine
+except ImportError:
+    from src.engine import InferenceEngine
 from transformers import AutoTokenizer
 import sys
 
@@ -29,17 +32,22 @@ def run_chat(model_name: str):
             # Add user message to conversation
             conversation_history.append({"role": "user", "content": user_input})
 
-            # TODO: Implement the chat response generation logic
-            # This should:
-            # 1. Format the conversation history properly for the model
-            # 2. Call the engine's chat_completion or generate method
-            # 3. Handle the response appropriately
-            # 4. Add the model's response to conversation history
-            # 5. Display the model's response to the user
-            # 6. Manage context length to avoid exceeding model limits
-
-            # For now, raise an error to indicate this needs implementation
-            print("Assistant: [Response would appear here once implemented]")
+            # Call engine to get response
+            response = engine.chat_completion(conversation_history)
+            
+            # Extract assistant message
+            # Structure matches OpenAI format: {'choices': [{'message': {'content': ...}}]}
+            try:
+                assistant_content = response["choices"][0]["message"]["content"]
+                
+                # Print response
+                print(f"Assistant: {assistant_content}\n")
+                
+                # Add to history
+                conversation_history.append({"role": "assistant", "content": assistant_content})
+                
+            except (KeyError, IndexError):
+                print("Assistant: (Error generating response)\n")
 
         except KeyboardInterrupt:
             print("\nEnding chat session.")

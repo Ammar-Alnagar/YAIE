@@ -1,5 +1,8 @@
 import uvicorn
-from ..server.api import create_app
+try:
+    from server.api import create_app
+except ImportError:
+    from src.server.api import create_app
 
 
 def run_server(model_name: str, host: str = 'localhost', port: int = 8000):
