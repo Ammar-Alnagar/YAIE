@@ -9,7 +9,7 @@
         <!-- Custom HTML head -->
         <!-- Custom Head with Mermaid Support -->
         <script type="module">
-            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';
             mermaid.initialize({ startOnLoad: false });
         
             document.addEventListener('DOMContentLoaded', async () => {
@@ -54,7 +54,7 @@
             const path_to_root = "../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../searchindex-f4284004.js";
+            window.path_to_searchindex_js = "../../searchindex-fdda5022.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../../toc-676105c4.js"></script>
@@ -200,28 +200,27 @@
 <h2 id="1-concept-memory-bandwidth"><a class="header" href="#1-concept-memory-bandwidth">1. Concept: Memory Bandwidth</a></h2>
 <p>The main bottleneck in Attention is reading the huge $N \times N$ matrix from memory.
 <strong>Flash Attention</strong> breaks the problem into small “tiles” that fit into the GPU’s fast <strong>SRAM</strong> (Shared Memory). We compute everything for that tile without going back to slow Global Memory.</p>
-<pre><code class="language-mermaid">block-beta
-    columns 3
-    block:GlobalMemory
-        columns 1
+<pre><code class="language-mermaid">graph TB
+    subgraph GlobalMemory [Global Memory (HBM)]
         Q[Matrix Q]
         K[Matrix K]
         V[Matrix V]
     end
 
-    space
-
-    block:SRAM
-        columns 1
+    subgraph SRAM [Shared Memory (SRAM)]
         TileQ[Tile Q]
         TileK[Tile K]
         TileV[Tile V]
-        Comp(("Compute"))
+        Comp(("Compute QK^T * V"))
     end
 
     Q --&gt; TileQ
     K --&gt; TileK
     V --&gt; TileV
+
+    TileQ --&gt; Comp
+    TileK --&gt; Comp
+    TileV --&gt; Comp
 </code></pre>
 <hr>
 <h2 id="2-implementation-guide"><a class="header" href="#2-implementation-guide">2. Implementation Guide</a></h2>
