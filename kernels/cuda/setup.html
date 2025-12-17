@@ -54,10 +54,10 @@
             const path_to_root = "../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../searchindex-d63bbf73.js";
+            window.path_to_searchindex_js = "../../searchindex-1139ad4c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../toc-44f1b166.js"></script>
+        <script src="../../toc-7b94e012.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,23 +196,323 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="cuda-setup"><a class="header" href="#cuda-setup">CUDA Setup</a></h1>
-<p>Implementing custom CUDA kernels requires compiling C++/CUDA code and binding it to Python.</p>
-<h2 id="setuppy"><a class="header" href="#setuppy"><code>setup.py</code></a></h2>
-<p>We use <code>torch.utils.cpp_extension</code> to handle compilation.
-The <code>setup.py</code> file in the root directory is already configured to look for kernels in <code>src/kernels/cuda/</code>.</p>
-<h3 id="triggering-compilation"><a class="header" href="#triggering-compilation">Triggering Compilation</a></h3>
-<p>To compile your kernels, simply run:</p>
-<pre><code class="language-bash">pip install -e .
+                        <h1 id="build-system-and-cuda-kernels"><a class="header" href="#build-system-and-cuda-kernels">Build System and CUDA Kernels</a></h1>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The Mini-YAIE project includes a comprehensive build system for compiling custom CUDA kernels that provide optimized performance for SGLang-style inference operations. The build system is designed to be both educational and production-ready, allowing users to learn CUDA kernel development while achieving high performance.</p>
+<h2 id="build-system-architecture"><a class="header" href="#build-system-architecture">Build System Architecture</a></h2>
+<h3 id="build-scripts"><a class="header" href="#build-scripts">Build Scripts</a></h3>
+<p>The project provides multiple ways to build kernels:</p>
+<h4 id="shell-script-build_kernelssh"><a class="header" href="#shell-script-build_kernelssh">Shell Script: <code>build_kernels.sh</code></a></h4>
+<pre><code class="language-bash">#!/bin/bash
+# Comprehensive build script for CUDA kernels
+./build_kernels.sh
 </code></pre>
-<p>This command invokes <code>nvcc</code> (NVIDIA CUDA Compiler) on your <code>.cu</code> files.</p>
-<h3 id="using-the-kernels"><a class="header" href="#using-the-kernels">Using the Kernels</a></h3>
-<p>Once compiled, you can import them in Python:</p>
-<pre><code class="language-python">import mini_yaie_kernels
+<h4 id="makefile-integration"><a class="header" href="#makefile-integration">Makefile Integration</a></h4>
+<pre><code class="language-makefile"># Build kernels using make
+make build-kernels
+</code></pre>
+<h4 id="direct-python-build"><a class="header" href="#direct-python-build">Direct Python Build</a></h4>
+<pre><code class="language-bash"># Direct build using Python setup
+python setup_kernels.py build_ext --inplace
+</code></pre>
+<h3 id="build-dependencies"><a class="header" href="#build-dependencies">Build Dependencies</a></h3>
+<p>The build system requires:</p>
+<ul>
+<li><strong>CUDA Toolkit</strong>: Version 11.0 or higher</li>
+<li><strong>PyTorch with CUDA Support</strong>: For CUDA extensions</li>
+<li><strong>NVIDIA GPU</strong>: With compute capability &gt;= 6.0</li>
+<li><strong>System Compiler</strong>: GCC/Clang with C++14 support</li>
+<li><strong>Python Development Headers</strong>: For Python C API</li>
+</ul>
+<h2 id="cuda-kernel-design"><a class="header" href="#cuda-kernel-design">CUDA Kernel Design</a></h2>
+<h3 id="sglang-style-optimization-focus"><a class="header" href="#sglang-style-optimization-focus">SGLang-Style Optimization Focus</a></h3>
+<p>The CUDA kernels are specifically designed to optimize SGLang-style inference operations:</p>
+<ol>
+<li><strong>Radix Tree Operations</strong>: Efficient prefix matching on GPU</li>
+<li><strong>Paged Attention</strong>: Optimized attention for paged KV-cache</li>
+<li><strong>Memory Operations</strong>: High-performance memory management</li>
+<li><strong>Radix Attention</strong>: GPU-optimized radial attention with prefix sharing</li>
+</ol>
+<h3 id="performance-goals"><a class="header" href="#performance-goals">Performance Goals</a></h3>
+<p>The kernels target SGLang-specific optimizations:</p>
+<ul>
+<li><strong>Memory Bandwidth Optimization</strong>: Minimize memory access overhead</li>
+<li><strong>Computation Sharing</strong>: Implement efficient prefix sharing on GPU</li>
+<li><strong>Batch Processing</strong>: Optimize for variable-length batch processing</li>
+<li><strong>Cache Efficiency</strong>: Optimize for GPU cache hierarchies</li>
+</ul>
+<h2 id="cuda-kernel-components"><a class="header" href="#cuda-kernel-components">CUDA Kernel Components</a></h2>
+<h3 id="1-memory-operations-kernels"><a class="header" href="#1-memory-operations-kernels">1. Memory Operations Kernels</a></h3>
+<h4 id="paged-kv-cache-operations"><a class="header" href="#paged-kv-cache-operations">Paged KV-Cache Operations</a></h4>
+<pre><code class="language-cuda">// Efficient operations on paged key-value cache
+__global__ void copy_blocks_kernel(
+    float* dst_keys, float* dst_values,
+    float* src_keys, float* src_values,
+    int* block_mapping, int num_blocks
+);
+</code></pre>
+<h4 id="block-management"><a class="header" href="#block-management">Block Management</a></h4>
+<ul>
+<li>Block allocation and deallocation</li>
+<li>Memory copying between blocks</li>
+<li>Block state management</li>
+</ul>
+<h3 id="2-flash-attention-kernels"><a class="header" href="#2-flash-attention-kernels">2. Flash Attention Kernels</a></h3>
+<h4 id="optimized-attention-computation"><a class="header" href="#optimized-attention-computation">Optimized Attention Computation</a></h4>
+<pre><code class="language-cuda">// Optimized attention for both prefill and decode phases
+template&lt;typename T&gt;
+__global__ void flash_attention_kernel(
+    const T* q, const T* k, const T* v,
+    T* output, float* lse,  // logsumexp for numerical stability
+    int num_heads, int head_dim, int seq_len
+);
+</code></pre>
+<h4 id="features"><a class="header" href="#features">Features</a></h4>
+<ul>
+<li>Memory-efficient attention computation</li>
+<li>Numerical stability with logsumexp</li>
+<li>Support for variable sequence lengths</li>
+<li>Optimized memory access patterns</li>
+</ul>
+<h3 id="3-paged-attention-kernels"><a class="header" href="#3-paged-attention-kernels">3. Paged Attention Kernels</a></h3>
+<h4 id="paged-memory-access"><a class="header" href="#paged-memory-access">Paged Memory Access</a></h4>
+<pre><code class="language-cuda">// Attention with paged key-value cache support
+__global__ void paged_attention_kernel(
+    float* output,
+    const float* query,
+    const float* key_cache,
+    const float* value_cache,
+    const int* block_tables,
+    const int* context_lens,
+    int num_kv_heads, int head_dim, int block_size
+);
+</code></pre>
+<h4 id="features-1"><a class="header" href="#features-1">Features</a></h4>
+<ul>
+<li>Direct paged cache access patterns</li>
+<li>Efficient block index computation</li>
+<li>Memory coalescing optimization</li>
+<li>Support for shared prefix computation</li>
+</ul>
+<h3 id="4-radix-operations-kernels"><a class="header" href="#4-radix-operations-kernels">4. Radix Operations Kernels</a></h3>
+<h4 id="prefix-matching-operations"><a class="header" href="#prefix-matching-operations">Prefix Matching Operations</a></h4>
+<pre><code class="language-cuda">// GPU-accelerated prefix matching for SGLang-style sharing
+__global__ void radix_tree_lookup_kernel(
+    int* token_ids, int* request_ids,
+    int* prefix_matches, int batch_size
+);
+</code></pre>
+<h4 id="features-2"><a class="header" href="#features-2">Features</a></h4>
+<ul>
+<li>Parallel prefix matching</li>
+<li>Efficient tree traversal on GPU</li>
+<li>Shared computation identification</li>
+<li>Batch processing optimization</li>
+</ul>
+<h2 id="build-process-details"><a class="header" href="#build-process-details">Build Process Details</a></h2>
+<h3 id="setup-configuration"><a class="header" href="#setup-configuration">Setup Configuration</a></h3>
+<p>The build system uses PyTorch’s <code>setup.py</code> for CUDA extension compilation:</p>
+<pre><code class="language-python"># setup_kernels.py
+from torch.utils.cpp_extension import setup, CUDAExtension
 
-# Call your C++ function
-mini_yaie_kernels.flash_attention.forward(...)
+setup(
+    name="yaie_kernels",
+    ext_modules=[
+        CUDAExtension(
+            name="yaie_kernels",
+            sources=[
+                "kernels/cuda/radix_attention.cu",
+                "kernels/cuda/paged_attention.cu",
+                "kernels/cuda/memory_ops.cu",
+                "kernels/cuda/radix_ops.cu"
+            ],
+            extra_compile_args={
+                "cxx": ["-O3"],
+                "nvcc": ["-O3", "--use_fast_math"]
+            }
+        )
+    ],
+    cmdclass={"build_ext": torch.utils.cpp_extension.BuildExtension}
+)
 </code></pre>
+<h3 id="compilation-flags"><a class="header" href="#compilation-flags">Compilation Flags</a></h3>
+<p>The build system uses optimization flags for performance:</p>
+<ul>
+<li><code>-O3</code>: Maximum optimization</li>
+<li><code>--use_fast_math</code>: Fast math operations</li>
+<li><code>-arch=sm_60</code>: Target specific GPU architectures</li>
+<li><code>-lineinfo</code>: Include debug line information</li>
+</ul>
+<h3 id="architecture-targeting"><a class="header" href="#architecture-targeting">Architecture Targeting</a></h3>
+<p>The system supports multiple GPU architectures:</p>
+<pre><code class="language-bash"># Specify target architecture during build
+python setup_kernels.py build_ext --inplace --arch=75  # Turing GPUs
+python setup_kernels.py build_ext --inplace --arch=80  # Ampere GPUs
+</code></pre>
+<h2 id="cuda-kernel-implementation-guidelines"><a class="header" href="#cuda-kernel-implementation-guidelines">CUDA Kernel Implementation Guidelines</a></h2>
+<h3 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h3>
+<h4 id="unified-memory-vs-regular-memory"><a class="header" href="#unified-memory-vs-regular-memory">Unified Memory vs Regular Memory</a></h4>
+<pre><code class="language-cuda">// Use unified memory for easier management (if available)
+cudaMallocManaged(&amp;ptr, size);
+
+// Or regular device memory for better performance
+cudaMalloc(&amp;ptr, size);
+</code></pre>
+<h4 id="memory-pooling"><a class="header" href="#memory-pooling">Memory Pooling</a></h4>
+<ul>
+<li>Implement memory pooling for frequently allocated objects</li>
+<li>Reuse memory blocks across operations</li>
+<li>Batch memory operations when possible</li>
+</ul>
+<h3 id="thread-organization"><a class="header" href="#thread-organization">Thread Organization</a></h3>
+<h4 id="block-and-grid-sizing"><a class="header" href="#block-and-grid-sizing">Block and Grid Sizing</a></h4>
+<pre><code class="language-cuda">// Optimize for your specific algorithm
+dim3 blockSize(256);
+dim3 gridSize((N + blockSize.x - 1) / blockSize.x);
+</code></pre>
+<h4 id="warp-level-primitives"><a class="header" href="#warp-level-primitives">Warp-Level Primitives</a></h4>
+<ul>
+<li>Use warp-level operations for better efficiency</li>
+<li>Align memory accesses with warp boundaries</li>
+<li>Minimize warp divergence</li>
+</ul>
+<h3 id="synchronization"><a class="header" href="#synchronization">Synchronization</a></h3>
+<h4 id="cooperative-groups"><a class="header" href="#cooperative-groups">Cooperative Groups</a></h4>
+<pre><code class="language-cuda">#include &lt;cooperative_groups.h&gt;
+using namespace cooperative_groups;
+
+// Use cooperative groups for complex synchronization
+thread_block block = this_thread_block();
+</code></pre>
+<h4 id="memory-barriers"><a class="header" href="#memory-barriers">Memory Barriers</a></h4>
+<ul>
+<li>Use appropriate memory barriers for consistency</li>
+<li>Minimize unnecessary synchronization overhead</li>
+</ul>
+<h2 id="performance-optimization-strategies"><a class="header" href="#performance-optimization-strategies">Performance Optimization Strategies</a></h2>
+<h3 id="memory-bandwidth-optimization"><a class="header" href="#memory-bandwidth-optimization">Memory Bandwidth Optimization</a></h3>
+<h4 id="coalesced-access"><a class="header" href="#coalesced-access">Coalesced Access</a></h4>
+<pre><code class="language-cuda">// Ensure memory accesses are coalesced
+int tid = blockIdx.x * blockDim.x + threadIdx.x;
+// Access data[tid] by threads in order for coalescing
+</code></pre>
+<h4 id="shared-memory-usage"><a class="header" href="#shared-memory-usage">Shared Memory Usage</a></h4>
+<ul>
+<li>Use shared memory for frequently accessed data</li>
+<li>Implement tiling strategies for large operations</li>
+<li>Minimize global memory access</li>
+</ul>
+<h3 id="computation-optimization"><a class="header" href="#computation-optimization">Computation Optimization</a></h3>
+<h4 id="warp-level-operations"><a class="header" href="#warp-level-operations">Warp-Level Operations</a></h4>
+<ul>
+<li>Leverage warp-level primitives when possible</li>
+<li>Use vectorized operations (float4, int4)</li>
+<li>Minimize thread divergence within warps</li>
+</ul>
+<h3 id="kernel-fusion"><a class="header" href="#kernel-fusion">Kernel Fusion</a></h3>
+<h4 id="combined-operations"><a class="header" href="#combined-operations">Combined Operations</a></h4>
+<ul>
+<li>Fuse multiple operations into single kernels</li>
+<li>Reduce kernel launch overhead</li>
+<li>Improve memory locality</li>
+</ul>
+<h2 id="integration-with-python"><a class="header" href="#integration-with-python">Integration with Python</a></h2>
+<h3 id="pytorch-extensions"><a class="header" href="#pytorch-extensions">PyTorch Extensions</a></h3>
+<p>The CUDA kernels integrate with PyTorch using extensions:</p>
+<pre><code class="language-python">import torch
+import yaie_kernels  # Compiled extension
+
+# Use kernel from Python
+result = yaie_kernels.radix_attention_forward(
+    query, key, value, 
+    radix_tree_info, 
+    attention_mask
+)
+</code></pre>
+<h3 id="automatic-gpu-management"><a class="header" href="#automatic-gpu-management">Automatic GPU Management</a></h3>
+<p>The integration handles:</p>
+<ul>
+<li>GPU memory allocation</li>
+<li>Device synchronization</li>
+<li>Error propagation</li>
+<li>Backpropagation support</li>
+</ul>
+<h2 id="error-handling-and-debugging"><a class="header" href="#error-handling-and-debugging">Error Handling and Debugging</a></h2>
+<h3 id="build-time-errors"><a class="header" href="#build-time-errors">Build-Time Errors</a></h3>
+<p>Common build issues and solutions:</p>
+<pre><code class="language-bash"># CUDA toolkit not found
+export CUDA_HOME=/usr/local/cuda
+
+# Architecture mismatch
+# Check GPU compute capability and adjust flag
+
+# Missing PyTorch
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+</code></pre>
+<h3 id="runtime-error-checking"><a class="header" href="#runtime-error-checking">Runtime Error Checking</a></h3>
+<p>Kernels should include error checking:</p>
+<pre><code class="language-cuda">#define CUDA_CHECK(call) \
+    do { \
+        cudaError_t err = call; \
+        if (err != cudaSuccess) { \
+            fprintf(stderr, "CUDA error at %s:%d - %s\n", __FILE__, __LINE__, \
+                    cudaGetErrorString(err)); \
+            exit(1); \
+        } \
+    } while(0)
+</code></pre>
+<h2 id="testing-and-validation"><a class="header" href="#testing-and-validation">Testing and Validation</a></h2>
+<h3 id="kernel-testing"><a class="header" href="#kernel-testing">Kernel Testing</a></h3>
+<p>Test kernels with:</p>
+<ul>
+<li>Unit tests for individual functions</li>
+<li>Integration tests with Python interface</li>
+<li>Performance benchmarks</li>
+<li>Memory correctness validation</li>
+</ul>
+<h3 id="sglang-specific-tests"><a class="header" href="#sglang-specific-tests">SGLang-Specific Tests</a></h3>
+<p>Test SGLang optimization features:</p>
+<ul>
+<li>Prefix sharing correctness</li>
+<li>Memory management validation</li>
+<li>Performance gain verification</li>
+<li>Edge case handling</li>
+</ul>
+<h2 id="development-workflow"><a class="header" href="#development-workflow">Development Workflow</a></h2>
+<h3 id="iterative-development"><a class="header" href="#iterative-development">Iterative Development</a></h3>
+<p>The development process includes:</p>
+<ol>
+<li><strong>Kernel Design</strong>: Design algorithm for GPU execution</li>
+<li><strong>Implementation</strong>: Write CUDA kernel code</li>
+<li><strong>Building</strong>: Compile with build system</li>
+<li><strong>Testing</strong>: Validate correctness and performance</li>
+<li><strong>Optimization</strong>: Profile and optimize based on results</li>
+</ol>
+<h3 id="profiling-and-optimization"><a class="header" href="#profiling-and-optimization">Profiling and Optimization</a></h3>
+<p>Use NVIDIA tools for optimization:</p>
+<ul>
+<li><strong>Nsight Systems</strong>: Overall system profiling</li>
+<li><strong>Nsight Compute</strong>: Detailed kernel analysis</li>
+<li><strong>nvprof</strong>: Legacy profiling tool</li>
+</ul>
+<h2 id="future-extensions"><a class="header" href="#future-extensions">Future Extensions</a></h2>
+<h3 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h3>
+<p>Potential kernel enhancements:</p>
+<ul>
+<li>Quantized attention operations</li>
+<li>Sparse attention kernels</li>
+<li>Custom activation functions</li>
+<li>Advanced memory management</li>
+</ul>
+<h3 id="hardware-support"><a class="header" href="#hardware-support">Hardware Support</a></h3>
+<p>Expand support for:</p>
+<ul>
+<li>Different GPU architectures</li>
+<li>Multi-GPU operations</li>
+<li>Heterogeneous computing</li>
+<li>Tensor Core optimizations</li>
+</ul>
+<p>This build system and CUDA kernel architecture enables Mini-YAIE to achieve SGLang-style performance optimizations while maintaining educational value and extensibility.</p>
 
                     </main>
 

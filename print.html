@@ -55,10 +55,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d63bbf73.js";
+            window.path_to_searchindex_js = "searchindex-1139ad4c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-44f1b166.js"></script>
+        <script src="toc-7b94e012.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -236,8 +236,8 @@
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="environment-setup"><a class="header" href="#environment-setup">Environment Setup</a></h1>
 <h2 id="1-clone-the-repository"><a class="header" href="#1-clone-the-repository">1. Clone the Repository</a></h2>
-<pre><code class="language-bash">git clone https://github.com/yourusername/YAIE.git
-cd YAIE
+<pre><code class="language-bash">git clone https://github.com/yourusername/Mini-YAIE.git
+cd Mini-YAIE
 </code></pre>
 <h2 id="2-python-environment"><a class="header" href="#2-python-environment">2. Python Environment</a></h2>
 <p>It is highly recommended to use a virtual environment.</p>
@@ -469,28 +469,28 @@ python -c "from src.models.loader import ModelLoader; loader = ModelLoader('micr
 <h2 id="visualizing-the-difference"><a class="header" href="#visualizing-the-difference">Visualizing the Difference</a></h2>
 <pre><code class="language-mermaid">gantt
     title Static Batching (Inefficient)
-    dateFormat X
-    axisFormat %s
+    dateFormat YYYY-MM-DD
+    axisFormat %H:%M
 
     section Batch 1
-    Req A (Short) :done, a1, 0, 2
-    Padding       :crit, 2, 4
-    Req B (Long)  :active, b1, 0, 4
+    Req A (Short) :done, a1, 2024-01-01, 2d
+    Padding       :crit, 2024-01-03, 2d
+    Req B (Long)  :active, b1, 2024-01-01, 4d
 
     section Batch 2
-    Req C :c1, 4, 6
+    Req C :c1, 2024-01-05, 2d
 </code></pre>
 <pre><code class="language-mermaid">gantt
     title Continuous Batching (Efficient)
-    dateFormat X
-    axisFormat %s
+    dateFormat YYYY-MM-DD
+    axisFormat %H:%M
 
     section GPU Stream
-    Req A (Short) :done, a1, 0, 2
-    Req C (New!)  :active, c1, 2, 4
+    Req A (Short) :done, a1, 2024-01-01, 2d
+    Req C (New!)  :active, c1, 2024-01-03, 2d
 
     section GPU Stream 2
-    Req B (Long)  :active, b1, 0, 4
+    Req B (Long)  :active, b1, 2024-01-01, 4d
 </code></pre>
 <h2 id="the-solution-continuous-batching-orca"><a class="header" href="#the-solution-continuous-batching-orca">The Solution: Continuous Batching (Orca)</a></h2>
 <p>Introduced by the Orca paper, Continuous Batching (or Iteration-level Batching) decouples the implementation of a batch from the user’s view.</p>
@@ -554,19 +554,19 @@ python -c "from src.models.loader import ModelLoader; loader = ModelLoader('micr
 <li><strong>Mapping</strong>: A “Block Table” maps logical token positions to physical block addresses.</li>
 </ol>
 <pre><code class="language-mermaid">graph LR
-    subgraph Logical["Logical Sequence (Request)"]
+    subgraph Logical[Logical Sequence Request]
         L0[Block 0: "Hello"]
         L1[Block 1: "World"]
         L2[Block 2: "!"]
     end
 
-    subgraph Table["Page Table"]
+    subgraph Table[Page Table]
         T0[0 -&gt; 7]
         T1[1 -&gt; 2]
         T2[2 -&gt; 9]
     end
 
-    subgraph Physical["GPU Memory (Physical Blocks)"]
+    subgraph Physical[GPU Memory Physical Blocks]
         B0[Block 0]
         B1[Block 1]
         B2[Block 2: "World"]:::used
@@ -700,15 +700,15 @@ python -c "from src.models.loader import ModelLoader; loader = ModelLoader('micr
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
 <p>Mini-YAIE uses a flexible configuration system that allows users to customize various aspects of the inference engine without modifying the code. The configuration system provides settings for memory management, scheduling, model loading, and performance optimization.</p>
 <h2 id="configuration-structure"><a class="header" href="#configuration-structure">Configuration Structure</a></h2>
-<p>The configuration system is built around the main <code>config.py</code> file in the src directory. The system supports:</p>
+<p>The configuration system is built around the <code>SGLangConfig</code> dataclass in <code>src/config.py</code>. The system supports:</p>
 <ul>
-<li>Environment variable overrides</li>
+<li>Dataclass-based configuration with type hints</li>
 <li>Default values for all parameters</li>
-<li>Type checking and validation</li>
+<li>Dictionary-based overrides</li>
 <li>Component-specific configuration sections</li>
 </ul>
 <h2 id="key-configuration-parameters"><a class="header" href="#key-configuration-parameters">Key Configuration Parameters</a></h2>
-<h3 id="engine-configuration"><a class="header" href="#engine-configuration">Engine Configuration</a></h3>
+<h3 id="scheduler-configuration"><a class="header" href="#scheduler-configuration">Scheduler Configuration</a></h3>
 <pre><code class="language-python"># Maximum batch size for processing requests
 max_batch_size: int = 8
 
@@ -721,28 +721,54 @@ max_decode_batch_size: int = 256
 # Maximum sequence length allowed
 max_seq_len: int = 2048
 </code></pre>
-<h3 id="memory-management-configuration"><a class="header" href="#memory-management-configuration">Memory Management Configuration</a></h3>
-<pre><code class="language-python"># Number of memory blocks in the KV-cache pool
-num_blocks: int = 2000
+<h3 id="kv-cache-configuration"><a class="header" href="#kv-cache-configuration">KV Cache Configuration</a></h3>
+<pre><code class="language-python"># Number of GPU memory blocks for KV-cache
+num_gpu_blocks: int = 2000
+
+# Number of CPU memory blocks for swapping
+num_cpu_blocks: int = 1000
 
 # Size of each memory block (in tokens)
 block_size: int = 16
-
-# Data type for KV-cache storage
-dtype: torch.dtype = torch.float16
 </code></pre>
-<h3 id="model-specific-configuration"><a class="header" href="#model-specific-configuration">Model-Specific Configuration</a></h3>
-<pre><code class="language-python"># Model name for HuggingFace loading
-model_name: str
+<h3 id="model-configuration-1"><a class="header" href="#model-configuration-1">Model Configuration</a></h3>
+<pre><code class="language-python"># Data type for model weights and KV-cache
+dtype: str = "float16"  # Options: "float16", "float32", "bfloat16"
 
-# Maximum tokens to generate per request
-default_max_tokens: int = 128
+# Tensor parallelism size
+tensor_parallel_size: int = 1
+
+# GPU memory utilization fraction
+gpu_memory_utilization: float = 0.9
+
+# CPU swap space in GB
+swap_space: int = 4
+</code></pre>
+<h3 id="generation-configuration"><a class="header" href="#generation-configuration">Generation Configuration</a></h3>
+<pre><code class="language-python"># Default maximum tokens to generate per request
+default_max_tokens: int = 1024
 
 # Default sampling temperature
 default_temperature: float = 1.0
 
 # Default top-p value
 default_top_p: float = 1.0
+</code></pre>
+<h3 id="sglang-specific-features"><a class="header" href="#sglang-specific-features">SGLang-Specific Features</a></h3>
+<pre><code class="language-python"># Enable radix attention cache for prefix sharing
+enable_radix_cache: bool = True
+
+# Enable chunked prefill for long prompts
+enable_chunked_prefill: bool = True
+
+# Scheduling policy: "fcfs" (first-come-first-served)
+schedule_policy: str = "fcfs"
+
+# Enable prefix caching
+enable_prefix_caching: bool = True
+
+# Maximum scheduling steps before preemption
+max_num_schedule_steps: int = 1000
 </code></pre>
 <h2 id="configuration-loading"><a class="header" href="#configuration-loading">Configuration Loading</a></h2>
 <h3 id="default-configuration"><a class="header" href="#default-configuration">Default Configuration</a></h3>
@@ -783,17 +809,26 @@ max_batch_size = 4
 </code></pre>
 <h2 id="integration-with-components"><a class="header" href="#integration-with-components">Integration with Components</a></h2>
 <h3 id="engine-integration"><a class="header" href="#engine-integration">Engine Integration</a></h3>
-<p>The main engine reads configuration parameters during initialization:</p>
-<pre><code class="language-python">def __init__(self, model_name: str, config: Optional[Config] = None):
-    self.config = config or self._get_default_config()
-    # Initialize components with config values
-    self.scheduler = SGLangScheduler(
-        max_batch_size=self.config.max_batch_size,
-        max_prefill_batch_size=self.config.max_prefill_batch_size,
-        max_decode_batch_size=self.config.max_decode_batch_size
-    )
+<p>The main engine uses the SGLangConfig for initialization:</p>
+<pre><code class="language-python">from src.config import SGLangConfig, get_sglang_config
+
+# Use default config
+config = get_sglang_config()
+
+# Or override specific parameters
+config = get_sglang_config(
+    max_batch_size=16,
+    num_gpu_blocks=4000
+)
+
+# Initialize components with config values
+scheduler = SGLangScheduler(
+    max_batch_size=config.max_batch_size,
+    max_prefill_batch_size=config.max_prefill_batch_size,
+    max_decode_batch_size=config.max_decode_batch_size
+)
 </code></pre>
-<h3 id="scheduler-configuration"><a class="header" href="#scheduler-configuration">Scheduler Configuration</a></h3>
+<h3 id="scheduler-configuration-1"><a class="header" href="#scheduler-configuration-1">Scheduler Configuration</a></h3>
 <p>The SGLang scheduler uses configuration for scheduling policies:</p>
 <ul>
 <li>Batch size limits</li>
@@ -1047,7 +1082,7 @@ req_id = self.scheduler.add_request(prompt, **kwargs)
 # Process in generation loop
 responses = self._run_generation_loop(request_ids)
 </code></pre>
-<h2 id="engine-configuration-1"><a class="header" href="#engine-configuration-1">Engine Configuration</a></h2>
+<h2 id="engine-configuration"><a class="header" href="#engine-configuration">Engine Configuration</a></h2>
 <p>The engine supports various configuration options:</p>
 <ul>
 <li>Model selection and loading</li>
@@ -1979,23 +2014,323 @@ We need to pick <strong>one</strong> token ID.</p>
 </code></pre>
 <p><strong>Your Turn</strong>: Implement <code>sample</code> in <code>SamplingKernel</code>. Start simple (just Temperature) and verify, then add Top-P.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="cuda-setup"><a class="header" href="#cuda-setup">CUDA Setup</a></h1>
-<p>Implementing custom CUDA kernels requires compiling C++/CUDA code and binding it to Python.</p>
-<h2 id="setuppy"><a class="header" href="#setuppy"><code>setup.py</code></a></h2>
-<p>We use <code>torch.utils.cpp_extension</code> to handle compilation.
-The <code>setup.py</code> file in the root directory is already configured to look for kernels in <code>src/kernels/cuda/</code>.</p>
-<h3 id="triggering-compilation"><a class="header" href="#triggering-compilation">Triggering Compilation</a></h3>
-<p>To compile your kernels, simply run:</p>
-<pre><code class="language-bash">pip install -e .
+<h1 id="build-system-and-cuda-kernels"><a class="header" href="#build-system-and-cuda-kernels">Build System and CUDA Kernels</a></h1>
+<h2 id="overview-5"><a class="header" href="#overview-5">Overview</a></h2>
+<p>The Mini-YAIE project includes a comprehensive build system for compiling custom CUDA kernels that provide optimized performance for SGLang-style inference operations. The build system is designed to be both educational and production-ready, allowing users to learn CUDA kernel development while achieving high performance.</p>
+<h2 id="build-system-architecture"><a class="header" href="#build-system-architecture">Build System Architecture</a></h2>
+<h3 id="build-scripts"><a class="header" href="#build-scripts">Build Scripts</a></h3>
+<p>The project provides multiple ways to build kernels:</p>
+<h4 id="shell-script-build_kernelssh"><a class="header" href="#shell-script-build_kernelssh">Shell Script: <code>build_kernels.sh</code></a></h4>
+<pre><code class="language-bash">#!/bin/bash
+# Comprehensive build script for CUDA kernels
+./build_kernels.sh
 </code></pre>
-<p>This command invokes <code>nvcc</code> (NVIDIA CUDA Compiler) on your <code>.cu</code> files.</p>
-<h3 id="using-the-kernels"><a class="header" href="#using-the-kernels">Using the Kernels</a></h3>
-<p>Once compiled, you can import them in Python:</p>
-<pre><code class="language-python">import mini_yaie_kernels
+<h4 id="makefile-integration"><a class="header" href="#makefile-integration">Makefile Integration</a></h4>
+<pre><code class="language-makefile"># Build kernels using make
+make build-kernels
+</code></pre>
+<h4 id="direct-python-build"><a class="header" href="#direct-python-build">Direct Python Build</a></h4>
+<pre><code class="language-bash"># Direct build using Python setup
+python setup_kernels.py build_ext --inplace
+</code></pre>
+<h3 id="build-dependencies"><a class="header" href="#build-dependencies">Build Dependencies</a></h3>
+<p>The build system requires:</p>
+<ul>
+<li><strong>CUDA Toolkit</strong>: Version 11.0 or higher</li>
+<li><strong>PyTorch with CUDA Support</strong>: For CUDA extensions</li>
+<li><strong>NVIDIA GPU</strong>: With compute capability &gt;= 6.0</li>
+<li><strong>System Compiler</strong>: GCC/Clang with C++14 support</li>
+<li><strong>Python Development Headers</strong>: For Python C API</li>
+</ul>
+<h2 id="cuda-kernel-design"><a class="header" href="#cuda-kernel-design">CUDA Kernel Design</a></h2>
+<h3 id="sglang-style-optimization-focus"><a class="header" href="#sglang-style-optimization-focus">SGLang-Style Optimization Focus</a></h3>
+<p>The CUDA kernels are specifically designed to optimize SGLang-style inference operations:</p>
+<ol>
+<li><strong>Radix Tree Operations</strong>: Efficient prefix matching on GPU</li>
+<li><strong>Paged Attention</strong>: Optimized attention for paged KV-cache</li>
+<li><strong>Memory Operations</strong>: High-performance memory management</li>
+<li><strong>Radix Attention</strong>: GPU-optimized radial attention with prefix sharing</li>
+</ol>
+<h3 id="performance-goals"><a class="header" href="#performance-goals">Performance Goals</a></h3>
+<p>The kernels target SGLang-specific optimizations:</p>
+<ul>
+<li><strong>Memory Bandwidth Optimization</strong>: Minimize memory access overhead</li>
+<li><strong>Computation Sharing</strong>: Implement efficient prefix sharing on GPU</li>
+<li><strong>Batch Processing</strong>: Optimize for variable-length batch processing</li>
+<li><strong>Cache Efficiency</strong>: Optimize for GPU cache hierarchies</li>
+</ul>
+<h2 id="cuda-kernel-components"><a class="header" href="#cuda-kernel-components">CUDA Kernel Components</a></h2>
+<h3 id="1-memory-operations-kernels"><a class="header" href="#1-memory-operations-kernels">1. Memory Operations Kernels</a></h3>
+<h4 id="paged-kv-cache-operations"><a class="header" href="#paged-kv-cache-operations">Paged KV-Cache Operations</a></h4>
+<pre><code class="language-cuda">// Efficient operations on paged key-value cache
+__global__ void copy_blocks_kernel(
+    float* dst_keys, float* dst_values,
+    float* src_keys, float* src_values,
+    int* block_mapping, int num_blocks
+);
+</code></pre>
+<h4 id="block-management"><a class="header" href="#block-management">Block Management</a></h4>
+<ul>
+<li>Block allocation and deallocation</li>
+<li>Memory copying between blocks</li>
+<li>Block state management</li>
+</ul>
+<h3 id="2-flash-attention-kernels"><a class="header" href="#2-flash-attention-kernels">2. Flash Attention Kernels</a></h3>
+<h4 id="optimized-attention-computation"><a class="header" href="#optimized-attention-computation">Optimized Attention Computation</a></h4>
+<pre><code class="language-cuda">// Optimized attention for both prefill and decode phases
+template&lt;typename T&gt;
+__global__ void flash_attention_kernel(
+    const T* q, const T* k, const T* v,
+    T* output, float* lse,  // logsumexp for numerical stability
+    int num_heads, int head_dim, int seq_len
+);
+</code></pre>
+<h4 id="features"><a class="header" href="#features">Features</a></h4>
+<ul>
+<li>Memory-efficient attention computation</li>
+<li>Numerical stability with logsumexp</li>
+<li>Support for variable sequence lengths</li>
+<li>Optimized memory access patterns</li>
+</ul>
+<h3 id="3-paged-attention-kernels"><a class="header" href="#3-paged-attention-kernels">3. Paged Attention Kernels</a></h3>
+<h4 id="paged-memory-access"><a class="header" href="#paged-memory-access">Paged Memory Access</a></h4>
+<pre><code class="language-cuda">// Attention with paged key-value cache support
+__global__ void paged_attention_kernel(
+    float* output,
+    const float* query,
+    const float* key_cache,
+    const float* value_cache,
+    const int* block_tables,
+    const int* context_lens,
+    int num_kv_heads, int head_dim, int block_size
+);
+</code></pre>
+<h4 id="features-1"><a class="header" href="#features-1">Features</a></h4>
+<ul>
+<li>Direct paged cache access patterns</li>
+<li>Efficient block index computation</li>
+<li>Memory coalescing optimization</li>
+<li>Support for shared prefix computation</li>
+</ul>
+<h3 id="4-radix-operations-kernels"><a class="header" href="#4-radix-operations-kernels">4. Radix Operations Kernels</a></h3>
+<h4 id="prefix-matching-operations"><a class="header" href="#prefix-matching-operations">Prefix Matching Operations</a></h4>
+<pre><code class="language-cuda">// GPU-accelerated prefix matching for SGLang-style sharing
+__global__ void radix_tree_lookup_kernel(
+    int* token_ids, int* request_ids,
+    int* prefix_matches, int batch_size
+);
+</code></pre>
+<h4 id="features-2"><a class="header" href="#features-2">Features</a></h4>
+<ul>
+<li>Parallel prefix matching</li>
+<li>Efficient tree traversal on GPU</li>
+<li>Shared computation identification</li>
+<li>Batch processing optimization</li>
+</ul>
+<h2 id="build-process-details"><a class="header" href="#build-process-details">Build Process Details</a></h2>
+<h3 id="setup-configuration"><a class="header" href="#setup-configuration">Setup Configuration</a></h3>
+<p>The build system uses PyTorch’s <code>setup.py</code> for CUDA extension compilation:</p>
+<pre><code class="language-python"># setup_kernels.py
+from torch.utils.cpp_extension import setup, CUDAExtension
 
-# Call your C++ function
-mini_yaie_kernels.flash_attention.forward(...)
+setup(
+    name="yaie_kernels",
+    ext_modules=[
+        CUDAExtension(
+            name="yaie_kernels",
+            sources=[
+                "kernels/cuda/radix_attention.cu",
+                "kernels/cuda/paged_attention.cu",
+                "kernels/cuda/memory_ops.cu",
+                "kernels/cuda/radix_ops.cu"
+            ],
+            extra_compile_args={
+                "cxx": ["-O3"],
+                "nvcc": ["-O3", "--use_fast_math"]
+            }
+        )
+    ],
+    cmdclass={"build_ext": torch.utils.cpp_extension.BuildExtension}
+)
 </code></pre>
+<h3 id="compilation-flags"><a class="header" href="#compilation-flags">Compilation Flags</a></h3>
+<p>The build system uses optimization flags for performance:</p>
+<ul>
+<li><code>-O3</code>: Maximum optimization</li>
+<li><code>--use_fast_math</code>: Fast math operations</li>
+<li><code>-arch=sm_60</code>: Target specific GPU architectures</li>
+<li><code>-lineinfo</code>: Include debug line information</li>
+</ul>
+<h3 id="architecture-targeting"><a class="header" href="#architecture-targeting">Architecture Targeting</a></h3>
+<p>The system supports multiple GPU architectures:</p>
+<pre><code class="language-bash"># Specify target architecture during build
+python setup_kernels.py build_ext --inplace --arch=75  # Turing GPUs
+python setup_kernels.py build_ext --inplace --arch=80  # Ampere GPUs
+</code></pre>
+<h2 id="cuda-kernel-implementation-guidelines"><a class="header" href="#cuda-kernel-implementation-guidelines">CUDA Kernel Implementation Guidelines</a></h2>
+<h3 id="memory-management-3"><a class="header" href="#memory-management-3">Memory Management</a></h3>
+<h4 id="unified-memory-vs-regular-memory"><a class="header" href="#unified-memory-vs-regular-memory">Unified Memory vs Regular Memory</a></h4>
+<pre><code class="language-cuda">// Use unified memory for easier management (if available)
+cudaMallocManaged(&amp;ptr, size);
+
+// Or regular device memory for better performance
+cudaMalloc(&amp;ptr, size);
+</code></pre>
+<h4 id="memory-pooling"><a class="header" href="#memory-pooling">Memory Pooling</a></h4>
+<ul>
+<li>Implement memory pooling for frequently allocated objects</li>
+<li>Reuse memory blocks across operations</li>
+<li>Batch memory operations when possible</li>
+</ul>
+<h3 id="thread-organization"><a class="header" href="#thread-organization">Thread Organization</a></h3>
+<h4 id="block-and-grid-sizing"><a class="header" href="#block-and-grid-sizing">Block and Grid Sizing</a></h4>
+<pre><code class="language-cuda">// Optimize for your specific algorithm
+dim3 blockSize(256);
+dim3 gridSize((N + blockSize.x - 1) / blockSize.x);
+</code></pre>
+<h4 id="warp-level-primitives"><a class="header" href="#warp-level-primitives">Warp-Level Primitives</a></h4>
+<ul>
+<li>Use warp-level operations for better efficiency</li>
+<li>Align memory accesses with warp boundaries</li>
+<li>Minimize warp divergence</li>
+</ul>
+<h3 id="synchronization"><a class="header" href="#synchronization">Synchronization</a></h3>
+<h4 id="cooperative-groups"><a class="header" href="#cooperative-groups">Cooperative Groups</a></h4>
+<pre><code class="language-cuda">#include &lt;cooperative_groups.h&gt;
+using namespace cooperative_groups;
+
+// Use cooperative groups for complex synchronization
+thread_block block = this_thread_block();
+</code></pre>
+<h4 id="memory-barriers"><a class="header" href="#memory-barriers">Memory Barriers</a></h4>
+<ul>
+<li>Use appropriate memory barriers for consistency</li>
+<li>Minimize unnecessary synchronization overhead</li>
+</ul>
+<h2 id="performance-optimization-strategies"><a class="header" href="#performance-optimization-strategies">Performance Optimization Strategies</a></h2>
+<h3 id="memory-bandwidth-optimization"><a class="header" href="#memory-bandwidth-optimization">Memory Bandwidth Optimization</a></h3>
+<h4 id="coalesced-access"><a class="header" href="#coalesced-access">Coalesced Access</a></h4>
+<pre><code class="language-cuda">// Ensure memory accesses are coalesced
+int tid = blockIdx.x * blockDim.x + threadIdx.x;
+// Access data[tid] by threads in order for coalescing
+</code></pre>
+<h4 id="shared-memory-usage"><a class="header" href="#shared-memory-usage">Shared Memory Usage</a></h4>
+<ul>
+<li>Use shared memory for frequently accessed data</li>
+<li>Implement tiling strategies for large operations</li>
+<li>Minimize global memory access</li>
+</ul>
+<h3 id="computation-optimization"><a class="header" href="#computation-optimization">Computation Optimization</a></h3>
+<h4 id="warp-level-operations"><a class="header" href="#warp-level-operations">Warp-Level Operations</a></h4>
+<ul>
+<li>Leverage warp-level primitives when possible</li>
+<li>Use vectorized operations (float4, int4)</li>
+<li>Minimize thread divergence within warps</li>
+</ul>
+<h3 id="kernel-fusion"><a class="header" href="#kernel-fusion">Kernel Fusion</a></h3>
+<h4 id="combined-operations"><a class="header" href="#combined-operations">Combined Operations</a></h4>
+<ul>
+<li>Fuse multiple operations into single kernels</li>
+<li>Reduce kernel launch overhead</li>
+<li>Improve memory locality</li>
+</ul>
+<h2 id="integration-with-python"><a class="header" href="#integration-with-python">Integration with Python</a></h2>
+<h3 id="pytorch-extensions"><a class="header" href="#pytorch-extensions">PyTorch Extensions</a></h3>
+<p>The CUDA kernels integrate with PyTorch using extensions:</p>
+<pre><code class="language-python">import torch
+import yaie_kernels  # Compiled extension
+
+# Use kernel from Python
+result = yaie_kernels.radix_attention_forward(
+    query, key, value, 
+    radix_tree_info, 
+    attention_mask
+)
+</code></pre>
+<h3 id="automatic-gpu-management"><a class="header" href="#automatic-gpu-management">Automatic GPU Management</a></h3>
+<p>The integration handles:</p>
+<ul>
+<li>GPU memory allocation</li>
+<li>Device synchronization</li>
+<li>Error propagation</li>
+<li>Backpropagation support</li>
+</ul>
+<h2 id="error-handling-and-debugging"><a class="header" href="#error-handling-and-debugging">Error Handling and Debugging</a></h2>
+<h3 id="build-time-errors"><a class="header" href="#build-time-errors">Build-Time Errors</a></h3>
+<p>Common build issues and solutions:</p>
+<pre><code class="language-bash"># CUDA toolkit not found
+export CUDA_HOME=/usr/local/cuda
+
+# Architecture mismatch
+# Check GPU compute capability and adjust flag
+
+# Missing PyTorch
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+</code></pre>
+<h3 id="runtime-error-checking"><a class="header" href="#runtime-error-checking">Runtime Error Checking</a></h3>
+<p>Kernels should include error checking:</p>
+<pre><code class="language-cuda">#define CUDA_CHECK(call) \
+    do { \
+        cudaError_t err = call; \
+        if (err != cudaSuccess) { \
+            fprintf(stderr, "CUDA error at %s:%d - %s\n", __FILE__, __LINE__, \
+                    cudaGetErrorString(err)); \
+            exit(1); \
+        } \
+    } while(0)
+</code></pre>
+<h2 id="testing-and-validation-1"><a class="header" href="#testing-and-validation-1">Testing and Validation</a></h2>
+<h3 id="kernel-testing"><a class="header" href="#kernel-testing">Kernel Testing</a></h3>
+<p>Test kernels with:</p>
+<ul>
+<li>Unit tests for individual functions</li>
+<li>Integration tests with Python interface</li>
+<li>Performance benchmarks</li>
+<li>Memory correctness validation</li>
+</ul>
+<h3 id="sglang-specific-tests"><a class="header" href="#sglang-specific-tests">SGLang-Specific Tests</a></h3>
+<p>Test SGLang optimization features:</p>
+<ul>
+<li>Prefix sharing correctness</li>
+<li>Memory management validation</li>
+<li>Performance gain verification</li>
+<li>Edge case handling</li>
+</ul>
+<h2 id="development-workflow"><a class="header" href="#development-workflow">Development Workflow</a></h2>
+<h3 id="iterative-development"><a class="header" href="#iterative-development">Iterative Development</a></h3>
+<p>The development process includes:</p>
+<ol>
+<li><strong>Kernel Design</strong>: Design algorithm for GPU execution</li>
+<li><strong>Implementation</strong>: Write CUDA kernel code</li>
+<li><strong>Building</strong>: Compile with build system</li>
+<li><strong>Testing</strong>: Validate correctness and performance</li>
+<li><strong>Optimization</strong>: Profile and optimize based on results</li>
+</ol>
+<h3 id="profiling-and-optimization"><a class="header" href="#profiling-and-optimization">Profiling and Optimization</a></h3>
+<p>Use NVIDIA tools for optimization:</p>
+<ul>
+<li><strong>Nsight Systems</strong>: Overall system profiling</li>
+<li><strong>Nsight Compute</strong>: Detailed kernel analysis</li>
+<li><strong>nvprof</strong>: Legacy profiling tool</li>
+</ul>
+<h2 id="future-extensions-3"><a class="header" href="#future-extensions-3">Future Extensions</a></h2>
+<h3 id="advanced-features-2"><a class="header" href="#advanced-features-2">Advanced Features</a></h3>
+<p>Potential kernel enhancements:</p>
+<ul>
+<li>Quantized attention operations</li>
+<li>Sparse attention kernels</li>
+<li>Custom activation functions</li>
+<li>Advanced memory management</li>
+</ul>
+<h3 id="hardware-support"><a class="header" href="#hardware-support">Hardware Support</a></h3>
+<p>Expand support for:</p>
+<ul>
+<li>Different GPU architectures</li>
+<li>Multi-GPU operations</li>
+<li>Heterogeneous computing</li>
+<li>Tensor Core optimizations</li>
+</ul>
+<p>This build system and CUDA kernel architecture enables Mini-YAIE to achieve SGLang-style performance optimizations while maintaining educational value and extensibility.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="memory-operations-kernelscudamemory_opscu"><a class="header" href="#memory-operations-kernelscudamemory_opscu">Memory Operations (<code>kernels/cuda/memory_ops.cu</code>)</a></h1>
 <h2 id="concept"><a class="header" href="#concept">Concept</a></h2>
@@ -2033,13 +2368,13 @@ mini_yaie_kernels.flash_attention.forward(...)
 <p>The main bottleneck in Attention is reading the huge $N \times N$ matrix from memory.
 <strong>Flash Attention</strong> breaks the problem into small “tiles” that fit into the GPU’s fast <strong>SRAM</strong> (Shared Memory). We compute everything for that tile without going back to slow Global Memory.</p>
 <pre><code class="language-mermaid">graph TB
-    subgraph GlobalMemory [Global Memory (HBM)]
+    subgraph GlobalMemory[Global Memory HBM]
         Q[Matrix Q]
         K[Matrix K]
         V[Matrix V]
     end
 
-    subgraph SRAM [Shared Memory (SRAM)]
+    subgraph SRAM[Shared Memory SRAM]
         TileQ[Tile Q]
         TileK[Tile K]
         TileV[Tile V]
@@ -2163,8 +2498,954 @@ $Q \cdot K^T$, Softmax, $\cdot V$.</p>
 </ol>
 <p><em>Note: In the simplified version, this logic is often kept in CPU (Python) and only the KV indices are passed to the GPU.</em></p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="kernels-implementation-guide"><a class="header" href="#kernels-implementation-guide">Kernels Implementation Guide</a></h1>
+<h2 id="overview-6"><a class="header" href="#overview-6">Overview</a></h2>
+<p>This guide provides a comprehensive walkthrough for implementing the core kernels in Mini-YAIE that enable SGLang-style inference optimization. The implementation focuses on three key areas:</p>
+<ol>
+<li><strong>Python Implementations</strong>: Educational implementations of core algorithms</li>
+<li><strong>CUDA Kernels</strong>: Performance-optimized GPU implementations</li>
+<li><strong>Integration</strong>: Connecting kernels with the main inference engine</li>
+</ol>
+<h2 id="implementation-roadmap"><a class="header" href="#implementation-roadmap">Implementation Roadmap</a></h2>
+<h3 id="phase-1-core-python-kernels"><a class="header" href="#phase-1-core-python-kernels">Phase 1: Core Python Kernels</a></h3>
+<p>Implement the educational Python versions first:</p>
+<ol>
+<li>Radix tree for prefix matching</li>
+<li>Basic attention mechanisms</li>
+<li>KV-cache management</li>
+<li>Sampling algorithms</li>
+</ol>
+<h3 id="phase-2-cuda-kernel-development"><a class="header" href="#phase-2-cuda-kernel-development">Phase 2: CUDA Kernel Development</a></h3>
+<p>Develop optimized GPU versions:</p>
+<ol>
+<li>Memory operations kernels</li>
+<li>Paged attention implementation</li>
+<li>Flash attention optimization</li>
+<li>Radix operations acceleration</li>
+</ol>
+<h3 id="phase-3-integration-and-optimization"><a class="header" href="#phase-3-integration-and-optimization">Phase 3: Integration and Optimization</a></h3>
+<p>Connect kernels to the main system:</p>
+<ol>
+<li>Engine integration</li>
+<li>Performance validation</li>
+<li>Correctness verification</li>
+</ol>
+<h2 id="python-kernel-implementation-1"><a class="header" href="#python-kernel-implementation-1">Python Kernel Implementation</a></h2>
+<h3 id="1-radix-tree-implementation"><a class="header" href="#1-radix-tree-implementation">1. Radix Tree Implementation</a></h3>
+<p>Start with the radix tree that enables prefix sharing:</p>
+<p><strong>File</strong>: <code>src/kernels/radix_tree.py</code></p>
+<pre><code class="language-python">class RadixTreeNode:
+    def __init__(self, token_id: Optional[int] = None):
+        self.token_id = token_id
+        self.children: Dict[int, "RadixTreeNode"] = {}
+        self.request_ids: List[str] = []
+        self.kv_cache_refs: List[str] = []
+        self.is_terminal = False
+
+class RadixTree:
+    def __init__(self):
+        self.root = RadixTreeNode()
+        self.request_to_path: Dict[str, List[int]] = {}
+        self.path_to_node: Dict[str, RadixTreeNode] = {}
+    
+    def insert_request(self, request_id: str, token_ids: List[int]):
+        """Insert a request into the radix tree based on its token sequence"""
+        current = self.root
+        for token_id in token_ids:
+            if token_id not in current.children:
+                current.children[token_id] = RadixTreeNode(token_id)
+            current = current.children[token_id]
+            if request_id not in current.request_ids:
+                current.request_ids.append(request_id)
+        current.is_terminal = True
+        self.request_to_path[request_id] = token_ids
+        path_str = self._path_to_string(token_ids)
+        self.path_to_node[path_str] = current
+    
+    def find_shared_prefixes(self, token_ids: List[int]) -&gt; Tuple[List[str], int]:
+        """Find requests that share prefixes with the given token sequence"""
+        current = self.root
+        matched_requests = []
+        prefix_length = 0
+        
+        for i, token_id in enumerate(token_ids):
+            if token_id in current.children:
+                current = current.children[token_id]
+                matched_requests.extend(current.request_ids)
+                prefix_length = i + 1
+            else:
+                break
+        return list(set(matched_requests)), prefix_length
+</code></pre>
+<h3 id="2-kv-cache-management"><a class="header" href="#2-kv-cache-management">2. KV-Cache Management</a></h3>
+<p>Implement the paged KV-cache system:</p>
+<p><strong>File</strong>: <code>src/kernels/kv_cache.py</code></p>
+<pre><code class="language-python">class KVCacheBlock:
+    def __init__(self, block_id: int, size: int, num_heads: int, head_dim: int, dtype=torch.float16):
+        self.block_id = block_id
+        self.size = size
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.dtype = dtype
+        self.keys = None
+        self.values = None
+    
+    def allocate(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.keys = torch.zeros(self.size, self.num_heads, self.head_dim, dtype=self.dtype, device=device)
+        self.values = torch.zeros(self.size, self.num_heads, self.head_dim, dtype=self.dtype, device=device)
+
+class KVCacheManager:
+    def __init__(self, num_blocks: int, block_size: int, num_heads: int, head_dim: int, dtype=torch.float16):
+        self.num_blocks = num_blocks
+        self.block_size = block_size
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.dtype = dtype
+        
+        self.blocks: List[KVCacheBlock] = []
+        for i in range(num_blocks):
+            block = KVCacheBlock(i, block_size, num_heads, head_dim, dtype)
+            self.blocks.append(block)
+        
+        self.free_block_list: List[int] = list(range(num_blocks))
+        self.block_tables: dict = {}
+    
+    def allocate_blocks(self, request_id: str, num_tokens: int) -&gt; List[int]:
+        num_blocks_needed = (num_tokens + self.block_size - 1) // self.block_size
+        if len(self.free_block_list) &lt; num_blocks_needed:
+            raise RuntimeError(f"Not enough free blocks. Need {num_blocks_needed}, have {len(self.free_block_list)}")
+        
+        allocated_block_ids = []
+        for _ in range(num_blocks_needed):
+            block_id = self.free_block_list.pop(0)
+            allocated_block_ids.append(block_id)
+            self.blocks[block_id].allocate()
+        
+        self.block_tables[request_id] = allocated_block_ids
+        return allocated_block_ids
+</code></pre>
+<h3 id="3-radix-attention-implementation"><a class="header" href="#3-radix-attention-implementation">3. Radix Attention Implementation</a></h3>
+<p>Implement the radial attention mechanism:</p>
+<p><strong>File</strong>: <code>src/kernels/radix_attention.py</code></p>
+<pre><code class="language-python">import math
+from typing import List, Optional, Tuple
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+def rotate_half(x):
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None):
+    cos = cos.unsqueeze(0).unsqueeze(0)
+    sin = sin.unsqueeze(0).unsqueeze(0)
+    
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+class RadixAttentionBlock(nn.Module):
+    def __init__(self, hidden_size: int, num_heads: int, head_dim: int, max_position_embeddings: int = 2048):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.max_position_embeddings = max_position_embeddings
+        
+        total_hidden_dim = num_heads * head_dim
+        
+        self.q_proj = nn.Linear(hidden_size, total_hidden_dim, bias=False)
+        self.k_proj = nn.Linear(hidden_size, total_hidden_dim, bias=False)
+        self.v_proj = nn.Linear(hidden_size, total_hidden_dim, bias=False)
+        self.o_proj = nn.Linear(total_hidden_dim, hidden_size, bias=False)
+        
+        self.register_buffer(
+            "cos_cached",
+            torch.ones((max_position_embeddings, head_dim), dtype=torch.float32),
+            persistent=False,
+        )
+        self.register_buffer(
+            "sin_cached",
+            torch.ones((max_position_embeddings, head_dim), dtype=torch.float32),
+            persistent=False,
+        )
+        
+        self._setup_rope_embeddings()
+    
+    def _setup_rope_embeddings(self):
+        position_ids = torch.arange(self.max_position_embeddings, dtype=torch.float32)
+        inv_freq = 1.0 / (10000.0 ** (torch.arange(0, self.head_dim, 2, dtype=torch.float32) / self.head_dim))
+        
+        freqs = torch.einsum("i,j-&gt;ij", position_ids, inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        
+        self.cos_cached = emb.cos().to(dtype=torch.float16)
+        self.sin_cached = emb.sin().to(dtype=torch.float16)
+    
+    def forward(self, hidden_states: torch.Tensor, position_ids: Optional[torch.Tensor] = None, 
+                past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None) -&gt; torch.Tensor:
+        batch_size, seq_len, _ = hidden_states.shape
+        
+        query = self.q_proj(hidden_states)
+        key = self.k_proj(hidden_states)
+        value = self.v_proj(hidden_states)
+        
+        query = query.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key = key.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value = value.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        
+        cos_to_use = self.cos_cached[:seq_len].to(query.dtype)
+        sin_to_use = self.sin_cached[:seq_len].to(query.dtype)
+        
+        query, key = apply_rotary_pos_emb(query, key, cos_to_use, sin_to_use, position_ids)
+        
+        if past_key_value is not None:
+            key = torch.cat([past_key_value[0], key], dim=2)
+            value = torch.cat([past_key_value[1], value], dim=2)
+        
+        attn_weights = torch.matmul(query, key.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+        
+        attn_output = torch.matmul(attn_weights, value)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
+        
+        output = self.o_proj(attn_output)
+        return output
+</code></pre>
+<h3 id="4-sampling-kernel-implementation"><a class="header" href="#4-sampling-kernel-implementation">4. Sampling Kernel Implementation</a></h3>
+<p>Implement the token sampling system:</p>
+<p><strong>File</strong>: <code>src/kernels/sampling.py</code></p>
+<pre><code class="language-python">import torch
+
+class SamplingKernel:
+    def sample(self, logits: torch.Tensor, temperature: float = 1.0, top_p: float = 1.0, top_k: int = -1) -&gt; torch.Tensor:
+        if temperature != 1.0:
+            logits = logits / temperature
+        
+        probs = torch.softmax(logits, dim=-1)
+        batch_size, vocab_size = probs.shape
+        
+        if top_k &gt; 0:
+            top_k = min(top_k, vocab_size)
+            top_k_probs, top_k_indices = torch.topk(probs, top_k, dim=-1)
+            
+            new_probs = torch.zeros_like(probs)
+            new_probs.scatter_(1, top_k_indices, top_k_probs)
+            new_probs = new_probs / new_probs.sum(dim=-1, keepdim=True)
+            probs = new_probs
+        
+        if 0 &lt; top_p &lt; 1.0:
+            sorted_probs, sorted_indices = torch.sort(probs, dim=-1, descending=True)
+            cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+            
+            mask = cumulative_probs &lt;= top_p
+            if mask.shape[-1] &gt; 0:
+                mask[..., 0] = True
+            
+            filtered_probs = torch.zeros_like(probs)
+            filtered_probs.scatter_(1, sorted_indices, mask.float() * sorted_probs)
+            filtered_probs = filtered_probs / filtered_probs.sum(dim=-1, keepdim=True)
+            probs = filtered_probs
+        
+        sampled_ids = torch.multinomial(probs, num_samples=1).squeeze(-1)
+        return sampled_ids
+</code></pre>
+<h2 id="cuda-kernel-implementation"><a class="header" href="#cuda-kernel-implementation">CUDA Kernel Implementation</a></h2>
+<h3 id="1-memory-operations-kernels-1"><a class="header" href="#1-memory-operations-kernels-1">1. Memory Operations Kernels</a></h3>
+<p><strong>File</strong>: <code>src/kernels/cuda/memory_ops.cu</code></p>
+<pre><code class="language-cuda">#include &lt;torch/extension.h&gt;
+#include &lt;cuda.h&gt;
+#include &lt;cuda_runtime.h&gt;
+
+__global__ void copy_blocks_kernel(
+    float* key_cache, float* value_cache,
+    float* new_key_cache, float* new_value_cache,
+    int* block_mapping,  // [src_block_id, dst_block_id] pairs
+    int num_heads, int head_dim, int block_size,
+    int num_mappings
+) {
+    int mapping_idx = blockIdx.x;
+    if (mapping_idx &gt;= num_mappings) return;
+    
+    int src_block_id = block_mapping[mapping_idx * 2];
+    int dst_block_id = block_mapping[mapping_idx * 2 + 1];
+    
+    int total_elements_per_block = block_size * num_heads * head_dim;
+    
+    int tid = threadIdx.x;
+    if (tid &lt; total_elements_per_block) {
+        int src_idx = src_block_id * total_elements_per_block + tid;
+        int dst_idx = dst_block_id * total_elements_per_block + tid;
+        
+        new_key_cache[dst_idx] = key_cache[src_idx];
+        new_value_cache[dst_idx] = value_cache[src_idx];
+    }
+}
+
+torch::Tensor copy_blocks_cuda(
+    torch::Tensor key_cache, torch::Tensor value_cache,
+    torch::Tensor block_mapping,
+    int num_heads, int head_dim, int block_size
+) {
+    int num_mappings = block_mapping.size(0);
+    
+    auto options = key_cache.options();
+    auto new_key_cache = torch::zeros_like(key_cache);
+    auto new_value_cache = torch::zeros_like(value_cache);
+    
+    dim3 grid(num_mappings);
+    dim3 block(256);  // Use 256 threads per block
+    
+    copy_blocks_kernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(
+        key_cache.data_ptr&lt;float&gt;(),
+        value_cache.data_ptr&lt;float&gt;(),
+        new_key_cache.data_ptr&lt;float&gt;(),
+        new_value_cache.data_ptr&lt;float&gt;(),
+        block_mapping.data_ptr&lt;int&gt;(),
+        num_heads, head_dim, block_size,
+        num_mappings
+    );
+    
+    cudaDeviceSynchronize();
+    return std::make_tuple(new_key_cache, new_value_cache);
+}
+</code></pre>
+<h3 id="2-paged-attention-kernels"><a class="header" href="#2-paged-attention-kernels">2. Paged Attention Kernels</a></h3>
+<p><strong>File</strong>: <code>src/kernels/cuda/paged_attention.cu</code></p>
+<pre><code class="language-cuda">#include &lt;torch/extension.h&gt;
+#include &lt;cuda.h&gt;
+#include &lt;cuda_runtime.h&gt;
+
+__global__ void paged_attention_kernel(
+    float* output,           // [num_seqs, seq_len, num_heads, head_dim]
+    const float* query,      // [num_seqs, seq_len, num_heads, head_dim]
+    const float* key_cache,  // [num_blocks, block_size, num_kv_heads, head_dim]
+    const float* value_cache,// [num_blocks, block_size, num_kv_heads, head_dim]
+    const int* block_tables, // [num_seqs, max_blocks_per_seq]
+    const int* context_lens, // [num_seqs]
+    const int num_kv_heads,
+    const int num_queries_per_kv,
+    const int head_dim,
+    const int block_size,
+    const int max_num_blocks_per_seq
+) {
+    int seq_idx = blockIdx.x;
+    int q_head_idx = blockIdx.y;
+    int token_idx = blockIdx.z * blockDim.x + threadIdx.x;
+    
+    if (seq_idx &gt;= gridDim.x || q_head_idx &gt;= gridDim.y || token_idx &gt;= context_lens[seq_idx]) {
+        return;
+    }
+    
+    // Get corresponding KV head index
+    int kv_head_idx = q_head_idx / num_queries_per_kv;
+    
+    // Get query vector
+    int query_idx = seq_idx * context_lens[seq_idx] * gridDim.y * head_dim +
+                    token_idx * gridDim.y * head_dim +
+                    q_head_idx * head_dim;
+    
+    // Shared memory for the current query
+    extern __shared__ float shared_mem[];
+    float* query_vec = shared_mem;
+    
+    // Load query vector to shared memory
+    for (int d = 0; d &lt; head_dim; d++) {
+        query_vec[d] = query[query_idx + d];
+    }
+    
+    // Calculate which block and offset for this token
+    int block_idx = token_idx / block_size;
+    int block_offset = token_idx % block_size;
+    
+    // Get physical block number from block table
+    int physical_block = block_tables[seq_idx * max_num_blocks_per_seq + block_idx];
+    
+    // Calculate the actual index in the cache
+    int cache_idx = physical_block * block_size * num_kv_heads * head_dim +
+                    block_offset * num_kv_heads * head_dim +
+                    kv_head_idx * head_dim;
+    
+    // Perform attention computation
+    float sum = 0.0f;
+    for (int d = 0; d &lt; head_dim; d++) {
+        sum += query_vec[d] * key_cache[cache_idx + d];
+    }
+    
+    // Apply softmax and multiply with value
+    float attention_weight = __expf(sum);  // Simplified (real softmax needs normalization)
+    for (int d = 0; d &lt; head_dim; d++) {
+        int output_idx = seq_idx * context_lens[seq_idx] * gridDim.y * head_dim +
+                         token_idx * gridDim.y * head_dim +
+                         q_head_idx * head_dim + d;
+        output[output_idx] += attention_weight * value_cache[cache_idx + d];
+    }
+}
+
+torch::Tensor paged_attention_cuda(
+    torch::Tensor query, torch::Tensor key_cache, torch::Tensor value_cache,
+    torch::Tensor block_tables, torch::Tensor context_lens,
+    int num_kv_heads, int num_queries_per_kv
+) {
+    int num_seqs = query.size(0);
+    int seq_len = query.size(1);
+    int num_heads = query.size(2);
+    int head_dim = query.size(3);
+    int block_size = key_cache.size(1);
+    int max_blocks_per_seq = block_tables.size(1);
+    
+    auto output = torch::zeros_like(query);
+    
+    dim3 grid(num_seqs, num_heads, (seq_len + 255) / 256);  // 256 threads per block
+    dim3 block(256);
+    
+    // Allocate shared memory for query vector
+    int shared_mem_size = head_dim * sizeof(float);
+    
+    paged_attention_kernel&lt;&lt;&lt;grid, block, shared_mem_size&gt;&gt;&gt;(
+        output.data_ptr&lt;float&gt;(),
+        query.data_ptr&lt;float&gt;(),
+        key_cache.data_ptr&lt;float&gt;(),
+        value_cache.data_ptr&lt;float&gt;(),
+        block_tables.data_ptr&lt;int&gt;(),
+        context_lens.data_ptr&lt;int&gt;(),
+        num_kv_heads,
+        num_queries_per_kv,
+        head_dim,
+        block_size,
+        max_blocks_per_seq
+    );
+    
+    cudaDeviceSynchronize();
+    return output;
+}
+</code></pre>
+<h3 id="3-flash-attention-kernels-simplified"><a class="header" href="#3-flash-attention-kernels-simplified">3. Flash Attention Kernels (Simplified)</a></h3>
+<p><strong>File</strong>: <code>src/kernels/cuda/flash_attention.cu</code></p>
+<pre><code class="language-cuda">#include &lt;torch/extension.h&gt;
+#include &lt;cuda.h&gt;
+#include &lt;cuda_runtime.h&gt;
+
+#define TILE_SIZE 32  // Small tile for educational purposes
+
+__global__ void flash_attention_kernel(
+    float* output,
+    const float* query,
+    const float* key,
+    const float* value,
+    const int* seq_lens,
+    const int num_seqs,
+    const int num_heads,
+    const int head_dim,
+    const int max_seq_len
+) {
+    int seq_idx = blockIdx.x;
+    int head_idx = blockIdx.y;
+    
+    if (seq_idx &gt;= num_seqs || head_idx &gt;= num_heads) return;
+    
+    int current_seq_len = seq_lens[seq_idx];
+    
+    // Shared memory for tiles
+    extern __shared__ float shared_mem[];
+    float* s_Q = shared_mem;
+    float* s_K = s_Q + TILE_SIZE * head_dim;
+    float* s_V = s_K + TILE_SIZE * head_dim;
+    float* s_scores = s_V + TILE_SIZE * head_dim;
+    
+    // Process the sequence in tiles
+    for (int q_tile_start = 0; q_tile_start &lt; current_seq_len; q_tile_start += TILE_SIZE) {
+        // Load Q tile to shared memory
+        for (int i = threadIdx.x; i &lt; TILE_SIZE * head_dim; i += blockDim.x) {
+            int q_row = q_tile_start + i / head_dim;
+            int q_col = i % head_dim;
+            
+            if (q_row &lt; current_seq_len) {
+                int q_idx = seq_idx * max_seq_len * num_heads * head_dim +
+                           q_row * num_heads * head_dim +
+                           head_idx * head_dim + q_col;
+                s_Q[i] = query[q_idx];
+            } else {
+                s_Q[i] = 0.0f;
+            }
+        }
+        
+        __syncthreads();
+        
+        // For each K/V tile
+        for (int k_tile_start = 0; k_tile_start &lt; current_seq_len; k_tile_start += TILE_SIZE) {
+            // Load K and V tiles
+            for (int i = threadIdx.x; i &lt; TILE_SIZE * head_dim; i += blockDim.x) {
+                int k_row = k_tile_start + i / head_dim;
+                int k_col = i % head_dim;
+                
+                if (k_row &lt; current_seq_len) {
+                    int k_idx = seq_idx * max_seq_len * num_heads * head_dim +
+                               k_row * num_heads * head_dim +
+                               head_idx * head_dim + k_col;
+                    s_K[i] = key[k_idx];
+                    s_V[i] = value[k_idx];
+                } else {
+                    s_K[i] = 0.0f;
+                    s_V[i] = 0.0f;
+                }
+            }
+            
+            __syncthreads();
+            
+            // Compute attention scores for this tile
+            for (int q_local = threadIdx.x; q_local &lt; TILE_SIZE; q_local += blockDim.x) {
+                int q_global = q_tile_start + q_local;
+                if (q_global &gt;= current_seq_len) continue;
+                
+                float score_sum = 0.0f;
+                float max_score = -INFINITY;
+                
+                // Compute scores against K tile
+                for (int k_local = 0; k_local &lt; TILE_SIZE; k_local++) {
+                    int k_global = k_tile_start + k_local;
+                    if (k_global &gt;= current_seq_len) continue;
+                    
+                    float score = 0.0f;
+                    for (int d = 0; d &lt; head_dim; d++) {
+                        int q_offset = q_local * head_dim + d;
+                        int k_offset = k_local * head_dim + d;
+                        score += s_Q[q_offset] * s_K[k_offset];
+                    }
+                    
+                    // Apply causal mask
+                    if (k_global &gt; q_global) score = -INFINITY;
+                    
+                    // Update max for numerical stability
+                    if (score &gt; max_score) max_score = score;
+                    
+                    s_scores[q_local * TILE_SIZE + k_local] = score;
+                }
+                
+                // Apply softmax with numerical stability
+                float exp_sum = 0.0f;
+                for (int k_local = 0; k_local &lt; TILE_SIZE; k_local++) {
+                    int k_global = k_tile_start + k_local;
+                    if (k_global &gt;= current_seq_len || k_global &gt; q_global) {
+                        s_scores[q_local * TILE_SIZE + k_local] = 0.0f;
+                    } else {
+                        float score = s_scores[q_local * TILE_SIZE + k_local];
+                        float exp_score = __expf(score - max_score);
+                        s_scores[q_local * TILE_SIZE + k_local] = exp_score;
+                        exp_sum += exp_score;
+                    }
+                }
+                
+                // Normalize scores
+                if (exp_sum &gt; 0.0f) {
+                    for (int k_local = 0; k_local &lt; TILE_SIZE; k_local++) {
+                        s_scores[q_local * TILE_SIZE + k_local] /= exp_sum;
+                    }
+                }
+                
+                // Compute output = scores @ V
+                for (int d = 0; d &lt; head_dim; d++) {
+                    float output_val = 0.0f;
+                    for (int k_local = 0; k_local &lt; TILE_SIZE; k_local++) {
+                        int v_offset = k_local * head_dim + d;
+                        output_val += s_scores[q_local * TILE_SIZE + k_local] * s_V[v_offset];
+                    }
+                    
+                    int out_idx = seq_idx * max_seq_len * num_heads * head_dim +
+                                 q_global * num_heads * head_dim +
+                                 head_idx * head_dim + d;
+                    output[out_idx] = output_val;
+                }
+            }
+            
+            __syncthreads();
+        }
+    }
+}
+
+torch::Tensor flash_attention_cuda(
+    torch::Tensor query, torch::Tensor key, torch::Tensor value,
+    torch::Tensor seq_lens
+) {
+    int num_seqs = query.size(0);
+    int num_heads = query.size(2);
+    int head_dim = query.size(3);
+    int max_seq_len = query.size(1);
+    
+    auto output = torch::zeros_like(query);
+    
+    dim3 grid(num_seqs, num_heads);
+    dim3 block(256);
+    
+    // Shared memory for 3 tiles + scores matrix
+    int shared_mem_size = 3 * TILE_SIZE * head_dim * sizeof(float) +
+                          TILE_SIZE * TILE_SIZE * sizeof(float);
+    
+    flash_attention_kernel&lt;&lt;&lt;grid, block, shared_mem_size&gt;&gt;&gt;(
+        output.data_ptr&lt;float&gt;(),
+        query.data_ptr&lt;float&gt;(),
+        key.data_ptr&lt;float&gt;(),
+        value.data_ptr&lt;float&gt;(),
+        seq_lens.data_ptr&lt;int&gt;(),
+        num_seqs,
+        num_heads,
+        head_dim,
+        max_seq_len
+    );
+    
+    cudaDeviceSynchronize();
+    return output;
+}
+</code></pre>
+<h2 id="integration-and-testing"><a class="header" href="#integration-and-testing">Integration and Testing</a></h2>
+<h3 id="1-python-cuda-interface"><a class="header" href="#1-python-cuda-interface">1. Python-CUDA Interface</a></h3>
+<p>Create the Python interface for CUDA kernels:</p>
+<p><strong>File</strong>: <code>src/kernels/api.py</code></p>
+<pre><code class="language-python">"""
+API for accessing both Python and CUDA implementations of kernels
+"""
+
+import torch
+from typing import Optional
+
+# Try to import CUDA extensions
+try:
+    from . import yaie_kernels  # This will be built from CUDA sources
+    CUDA_AVAILABLE = True
+except ImportError:
+    print("CUDA extensions not available. Using Python implementations.")
+    CUDA_AVAILABLE = False
+
+def attention_forward(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor,
+                     use_cuda: bool = True, **kwargs):
+    """Unified attention interface that can use CUDA or Python implementation"""
+    if CUDA_AVAILABLE and use_cuda and query.is_cuda:
+        return yaie_kernels.flash_attention_cuda(query, key, value, 
+                                               kwargs.get('seq_lens', None))
+    else:
+        # Fallback to Python implementation
+        from .radix_attention import RadixAttentionBlock
+        attention_block = RadixAttentionBlock(
+            hidden_size=query.shape[-1],
+            num_heads=query.shape[-2],
+            head_dim=query.shape[-1] // query.shape[-2]
+        )
+        return attention_block(query)
+
+def paged_attention_forward(query: torch.Tensor, key_cache: torch.Tensor, 
+                           value_cache: torch.Tensor, block_tables: torch.Tensor,
+                           context_lens: torch.Tensor, use_cuda: bool = True, **kwargs):
+    """Paged attention interface"""
+    if CUDA_AVAILABLE and use_cuda and query.is_cuda:
+        return yaie_kernels.paged_attention_cuda(
+            query, key_cache, value_cache, block_tables, context_lens,
+            kwargs.get('num_kv_heads', 1),
+            kwargs.get('num_queries_per_kv', 1)
+        )
+    else:
+        # Python fallback would go here
+        raise NotImplementedError("Paged attention Python fallback not implemented")
+
+def copy_blocks(key_cache: torch.Tensor, value_cache: torch.Tensor, 
+                block_mapping: torch.Tensor, use_cuda: bool = True, **kwargs):
+    """Memory copy interface"""
+    if CUDA_AVAILABLE and use_cuda and key_cache.is_cuda:
+        return yaie_kernels.copy_blocks_cuda(
+            key_cache, value_cache, block_mapping,
+            kwargs.get('num_heads', 1),
+            kwargs.get('head_dim', 64),
+            kwargs.get('block_size', 16)
+        )
+    else:
+        # Python fallback would go here
+        raise NotImplementedError("Copy blocks Python fallback not implemented")
+</code></pre>
+<h3 id="2-testing-framework"><a class="header" href="#2-testing-framework">2. Testing Framework</a></h3>
+<p>Create comprehensive tests:</p>
+<p><strong>File</strong>: <code>tests/test_kernels.py</code></p>
+<pre><code class="language-python">import pytest
+import torch
+import numpy as np
+
+from src.kernels.radix_tree import RadixTree
+from src.kernels.kv_cache import KVCacheManager
+from src.kernels.radix_attention import RadixAttentionBlock
+from src.kernels.sampling import SamplingKernel
+from src.kernels.api import attention_forward, paged_attention_forward, copy_blocks
+
+class TestRadixTree:
+    def test_basic_insertion_and_search(self):
+        tree = RadixTree()
+        
+        # Insert requests
+        tree.insert_request("req1", [1, 2, 3])
+        tree.insert_request("req2", [1, 2, 4])  # Shares prefix [1, 2]
+        tree.insert_request("req3", [5, 6, 7])  # No shared prefix
+        
+        # Test shared prefixes
+        shared, length = tree.find_shared_prefixes([1, 2, 5])
+        assert "req1" in shared
+        assert "req2" in shared
+        assert length == 2  # Common prefix [1, 2]
+    
+    def test_prefix_sharing_graph(self):
+        tree = RadixTree()
+        tree.insert_request("req1", [1, 2, 3])
+        tree.insert_request("req2", [1, 2, 4])
+        tree.insert_request("req3", [1, 5, 6])
+        
+        graph = tree.get_shared_computation_graph()
+        # Should show shared computation at token [1]
+        assert graph["request_count"] == 3  # All requests start with root
+        
+class TestKVCacheManager:
+    def test_basic_allocation(self):
+        cache_manager = KVCacheManager(
+            num_blocks=100,
+            block_size=16,
+            num_heads=8,
+            head_dim=64,
+            dtype=torch.float16
+        )
+        
+        # Allocate blocks for a request
+        blocks = cache_manager.allocate_blocks("req1", 20)  # Need 2 blocks (20/16 = 2)
+        assert len(blocks) == 2
+        
+        # Verify the blocks exist and have proper tensors
+        for block_id in blocks:
+            block = cache_manager.blocks[block_id]
+            assert block.keys is not None
+            assert block.values is not None
+            assert block.keys.shape == (16, 8, 64)  # block_size, num_heads, head_dim
+    
+    def test_block_reuse(self):
+        cache_manager = KVCacheManager(
+            num_blocks=10,
+            block_size=16,
+            num_heads=8,
+            head_dim=64
+        )
+        
+        # Allocate all blocks
+        req_ids = [f"req{i}" for i in range(10)]
+        for req_id in req_ids:
+            cache_manager.allocate_blocks(req_id, 10)
+        
+        assert len(cache_manager.free_block_list) == 0
+        
+        # Free some blocks
+        cache_manager.free_blocks("req0")
+        cache_manager.free_blocks("req1")
+        
+        assert len(cache_manager.free_block_list) == 2
+        assert 0 in cache_manager.free_block_list
+        assert 1 in cache_manager.free_block_list
+
+class TestRadixAttention:
+    def test_basic_attention_forward(self):
+        hidden_size = 512
+        num_heads = 8
+        head_dim = hidden_size // num_heads
+        
+        attention = RadixAttentionBlock(
+            hidden_size=hidden_size,
+            num_heads=num_heads,
+            head_dim=head_dim,
+            max_position_embeddings=256
+        )
+        
+        batch_size = 2
+        seq_len = 10
+        x = torch.randn(batch_size, seq_len, hidden_size, dtype=torch.float16)
+        
+        output = attention(x)
+        assert output.shape == (batch_size, seq_len, hidden_size)
+        assert not torch.isnan(output).any()
+    
+    def test_attention_with_past_key_value(self):
+        hidden_size = 256
+        num_heads = 4
+        head_dim = hidden_size // num_heads
+        
+        attention = RadixAttentionBlock(
+            hidden_size=hidden_size,
+            num_heads=num_heads,
+            head_dim=head_dim
+        )
+        
+        batch_size = 1
+        seq_len = 5
+        x = torch.randn(batch_size, seq_len, hidden_size)
+        
+        # First forward pass
+        output1, _, past_kv = attention(x, use_cache=True)
+        
+        # Second forward pass with past key-value
+        next_token = torch.randn(batch_size, 1, hidden_size)
+        output2, _, _ = attention(next_token, past_key_value=past_kv)
+        
+        assert output2.shape == (batch_size, 1, hidden_size)
+
+class TestSamplingKernel:
+    def test_temperature_sampling(self):
+        sampling = SamplingKernel()
+        
+        # Create logits with one clear winner
+        logits = torch.tensor([[10.0, 1.0, 1.0, 1.0]])  # First token is dominant
+        
+        # High temperature should allow other tokens
+        sampled_high_temp = sampling.sample(logits, temperature=2.0)
+        assert sampled_high_temp.shape == (1,)
+        
+        # Low temperature should favor dominant token
+        sampled_low_temp = sampling.sample(logits, temperature=0.1)
+        assert sampled_low_temp[0] == 0  # Should pick the dominant token
+    
+    def test_top_p_nucleus_sampling(self):
+        sampling = SamplingKernel()
+        
+        # Create logits where first 3 tokens account for ~90% of probability
+        logits = torch.tensor([[2.0, 1.5, 1.0, -10.0, -10.0]])
+        
+        # Top-p = 0.8 should exclude the last two tokens
+        sampled = sampling.sample(logits, top_p=0.8)
+        # Should be one of the first 3 tokens
+        assert sampled[0] in [0, 1, 2]
+    
+    def test_top_k_sampling(self):
+        sampling = SamplingKernel()
+        
+        # Create logits with clear ordering
+        logits = torch.tensor([[5.0, 4.0, 3.0, 2.0, 1.0]])
+        
+        # Top-k = 2 should only consider first 2 tokens
+        sampled = sampling.sample(logits, top_k=2)
+        assert sampled[0] in [0, 1]  # Should be one of top 2 tokens
+
+class TestIntegration:
+    def test_full_inference_pipeline(self):
+        """Test integration of all kernels in a simple pipeline"""
+        # This test would simulate a full inference step
+        batch_size = 2
+        seq_len = 10
+        hidden_size = 256
+        num_heads = 4
+        head_dim = hidden_size // num_heads
+        
+        # Create input
+        x = torch.randn(batch_size, seq_len, hidden_size)
+        
+        # Apply attention
+        attention = RadixAttentionBlock(
+            hidden_size=hidden_size,
+            num_heads=num_heads,
+            head_dim=head_dim
+        )
+        attn_output = attention(x)
+        assert attn_output.shape == (batch_size, seq_len, hidden_size)
+        
+        # Apply sampling (on logits that would come from LM head)
+        logits = torch.randn(batch_size, 1000)  # vocab_size = 1000
+        sampling = SamplingKernel()
+        sampled_tokens = sampling.sample(logits, temperature=0.7)
+        assert sampled_tokens.shape == (batch_size,)
+
+if __name__ == "__main__":
+    pytest.main([__file__])
+</code></pre>
+<h2 id="building-and-running"><a class="header" href="#building-and-running">Building and Running</a></h2>
+<h3 id="setup-configuration-1"><a class="header" href="#setup-configuration-1">Setup Configuration</a></h3>
+<p><strong>File</strong>: <code>setup_kernels.py</code></p>
+<pre><code class="language-python">from setuptools import setup
+from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+import os
+
+# Check if CUDA is available
+def get_extensions():
+    extensions = []
+    
+    # Check if CUDA is available
+    try:
+        import torch
+        if torch.cuda.is_available():
+            extensions.append(
+                CUDAExtension(
+                    name='yaie_kernels',
+                    sources=[
+                        'src/kernels/cuda/memory_ops.cu',
+                        'src/kernels/cuda/paged_attention.cu', 
+                        'src/kernels/cuda/flash_attention.cu',
+                        'src/kernels/cuda/radix_ops.cu',
+                        'src/kernels/cuda/pybind.cpp',  # Python bindings
+                    ],
+                    extra_compile_args={
+                        'cxx': ['-O3'],
+                        'nvcc': ['-O3', '--use_fast_math', '-arch=sm_70']
+                    }
+                )
+            )
+    except:
+        print("CUDA not available, building without CUDA extensions")
+    
+    return extensions
+
+setup(
+    name='yaie_kernels',
+    ext_modules=get_extensions(),
+    cmdclass={'build_ext': BuildExtension},
+    zip_safe=False,
+)
+</code></pre>
+<h2 id="performance-optimization-guidelines"><a class="header" href="#performance-optimization-guidelines">Performance Optimization Guidelines</a></h2>
+<h3 id="cuda-optimization-tips"><a class="header" href="#cuda-optimization-tips">CUDA Optimization Tips</a></h3>
+<ol>
+<li><strong>Memory Coalescing</strong>: Ensure threads in a warp access consecutive memory</li>
+<li><strong>Shared Memory</strong>: Use for frequently accessed data</li>
+<li><strong>Occupancy</strong>: Maximize number of active warps</li>
+<li><strong>Reduction Operations</strong>: Use efficient parallel reduction algorithms</li>
+</ol>
+<h3 id="profiling-and-benchmarking"><a class="header" href="#profiling-and-benchmarking">Profiling and Benchmarking</a></h3>
+<p>Create benchmarking tools:</p>
+<pre><code class="language-python">import torch
+import time
+from torch.profiler import profile, record_function, ProfilerActivity
+
+def benchmark_kernel(kernel_func, *args, **kwargs):
+    """Benchmark a kernel function"""
+    # Warmup
+    for _ in range(3):
+        result = kernel_func(*args, **kwargs)
+    
+    # Actual timing
+    torch.cuda.synchronize()
+    start_time = time.time()
+    
+    for _ in range(10):  # Run multiple times for average
+        result = kernel_func(*args, **kwargs)
+    
+    torch.cuda.synchronize()
+    end_time = time.time()
+    
+    avg_time = (end_time - start_time) / 10
+    return avg_time, result
+
+def profile_kernel(kernel_func, *args, **kwargs):
+    """Profile a kernel function"""
+    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
+        result = kernel_func(*args, **kwargs)
+    
+    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+    return result
+</code></pre>
+<p>This comprehensive implementation guide provides everything needed to implement the core kernels for Mini-YAIE, following SGLang-style optimization principles while maintaining educational value.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="api--serving-openai-compatible-server"><a class="header" href="#api--serving-openai-compatible-server">API &amp; Serving: OpenAI-Compatible Server</a></h1>
-<h2 id="overview-5"><a class="header" href="#overview-5">Overview</a></h2>
+<h2 id="overview-7"><a class="header" href="#overview-7">Overview</a></h2>
 <p>The API server in Mini-YAIE implements an OpenAI-compatible interface, allowing the engine to be used with existing applications and tools designed for OpenAI’s API. The server uses FastAPI to provide RESTful endpoints with proper request/response handling, streaming support, and health monitoring.</p>
 <h2 id="api-design-philosophy"><a class="header" href="#api-design-philosophy">API Design Philosophy</a></h2>
 <p>The server follows OpenAI’s API specification to ensure compatibility with existing tools and applications while leveraging the advanced features of the SGLang-style inference engine. This approach allows users to:</p>
@@ -2355,7 +3636,7 @@ except Exception as e:
 <li>Continuous batching maintains high throughput</li>
 <li>Batch size limited by engine configuration</li>
 </ul>
-<h3 id="memory-management-3"><a class="header" href="#memory-management-3">Memory Management</a></h3>
+<h3 id="memory-management-4"><a class="header" href="#memory-management-4">Memory Management</a></h3>
 <p>The server shares memory with the inference engine:</p>
 <ul>
 <li>KV-cache is shared across API requests</li>
@@ -2469,7 +3750,7 @@ response = client.chat.completions.create(
 <li>Error rate monitoring</li>
 <li>Resource utilization metrics</li>
 </ul>
-<h2 id="advanced-features-2"><a class="header" href="#advanced-features-2">Advanced Features</a></h2>
+<h2 id="advanced-features-3"><a class="header" href="#advanced-features-3">Advanced Features</a></h2>
 <h3 id="model-loading-1"><a class="header" href="#model-loading-1">Model Loading</a></h3>
 <p>The server handles model loading automatically:</p>
 <ul>
@@ -2495,7 +3776,7 @@ response = client.chat.completions.create(
 <p>This OpenAI-compatible API server enables Mini-YAIE to be integrated into existing ecosystems while providing the performance benefits of SGLang-style inference optimization.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cli-usage-interactive-and-server-modes"><a class="header" href="#cli-usage-interactive-and-server-modes">CLI Usage: Interactive and Server Modes</a></h1>
-<h2 id="overview-6"><a class="header" href="#overview-6">Overview</a></h2>
+<h2 id="overview-8"><a class="header" href="#overview-8">Overview</a></h2>
 <p>Mini-YAIE provides a comprehensive command-line interface (CLI) that serves as the primary entry point for users. The CLI supports both interactive chat mode and server mode, making it suitable for both direct interaction and production deployment scenarios.</p>
 <h2 id="cli-architecture"><a class="header" href="#cli-architecture">CLI Architecture</a></h2>
 <h3 id="entry-point-structure"><a class="header" href="#entry-point-structure">Entry Point Structure</a></h3>
@@ -2563,7 +3844,7 @@ Commands:
 --max-tokens N              # Maximum tokens to generate (default: 512)
 --stream                    # Stream responses in real-time (default: true)
 </code></pre>
-<h4 id="model-configuration-1"><a class="header" href="#model-configuration-1">Model Configuration</a></h4>
+<h4 id="model-configuration-2"><a class="header" href="#model-configuration-2">Model Configuration</a></h4>
 <pre><code class="language-bash">--model MODEL_NAME          # Specify the model to use (required)
 </code></pre>
 <h3 id="interactive-chat-experience"><a class="header" href="#interactive-chat-experience">Interactive Chat Experience</a></h3>

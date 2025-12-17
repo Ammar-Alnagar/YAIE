@@ -54,10 +54,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d63bbf73.js";
+            window.path_to_searchindex_js = "../searchindex-1139ad4c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-44f1b166.js"></script>
+        <script src="../toc-7b94e012.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -212,19 +212,19 @@
 <li><strong>Mapping</strong>: A “Block Table” maps logical token positions to physical block addresses.</li>
 </ol>
 <pre><code class="language-mermaid">graph LR
-    subgraph Logical["Logical Sequence (Request)"]
+    subgraph Logical[Logical Sequence Request]
         L0[Block 0: "Hello"]
         L1[Block 1: "World"]
         L2[Block 2: "!"]
     end
 
-    subgraph Table["Page Table"]
+    subgraph Table[Page Table]
         T0[0 -&gt; 7]
         T1[1 -&gt; 2]
         T2[2 -&gt; 9]
     end
 
-    subgraph Physical["GPU Memory (Physical Blocks)"]
+    subgraph Physical[GPU Memory Physical Blocks]
         B0[Block 0]
         B1[Block 1]
         B2[Block 2: "World"]:::used

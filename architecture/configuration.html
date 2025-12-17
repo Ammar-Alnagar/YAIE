@@ -54,10 +54,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d63bbf73.js";
+            window.path_to_searchindex_js = "../searchindex-1139ad4c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-44f1b166.js"></script>
+        <script src="../toc-7b94e012.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -200,15 +200,15 @@
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
 <p>Mini-YAIE uses a flexible configuration system that allows users to customize various aspects of the inference engine without modifying the code. The configuration system provides settings for memory management, scheduling, model loading, and performance optimization.</p>
 <h2 id="configuration-structure"><a class="header" href="#configuration-structure">Configuration Structure</a></h2>
-<p>The configuration system is built around the main <code>config.py</code> file in the src directory. The system supports:</p>
+<p>The configuration system is built around the <code>SGLangConfig</code> dataclass in <code>src/config.py</code>. The system supports:</p>
 <ul>
-<li>Environment variable overrides</li>
+<li>Dataclass-based configuration with type hints</li>
 <li>Default values for all parameters</li>
-<li>Type checking and validation</li>
+<li>Dictionary-based overrides</li>
 <li>Component-specific configuration sections</li>
 </ul>
 <h2 id="key-configuration-parameters"><a class="header" href="#key-configuration-parameters">Key Configuration Parameters</a></h2>
-<h3 id="engine-configuration"><a class="header" href="#engine-configuration">Engine Configuration</a></h3>
+<h3 id="scheduler-configuration"><a class="header" href="#scheduler-configuration">Scheduler Configuration</a></h3>
 <pre><code class="language-python"># Maximum batch size for processing requests
 max_batch_size: int = 8
 
@@ -221,28 +221,54 @@ max_decode_batch_size: int = 256
 # Maximum sequence length allowed
 max_seq_len: int = 2048
 </code></pre>
-<h3 id="memory-management-configuration"><a class="header" href="#memory-management-configuration">Memory Management Configuration</a></h3>
-<pre><code class="language-python"># Number of memory blocks in the KV-cache pool
-num_blocks: int = 2000
+<h3 id="kv-cache-configuration"><a class="header" href="#kv-cache-configuration">KV Cache Configuration</a></h3>
+<pre><code class="language-python"># Number of GPU memory blocks for KV-cache
+num_gpu_blocks: int = 2000
+
+# Number of CPU memory blocks for swapping
+num_cpu_blocks: int = 1000
 
 # Size of each memory block (in tokens)
 block_size: int = 16
-
-# Data type for KV-cache storage
-dtype: torch.dtype = torch.float16
 </code></pre>
-<h3 id="model-specific-configuration"><a class="header" href="#model-specific-configuration">Model-Specific Configuration</a></h3>
-<pre><code class="language-python"># Model name for HuggingFace loading
-model_name: str
+<h3 id="model-configuration"><a class="header" href="#model-configuration">Model Configuration</a></h3>
+<pre><code class="language-python"># Data type for model weights and KV-cache
+dtype: str = "float16"  # Options: "float16", "float32", "bfloat16"
 
-# Maximum tokens to generate per request
-default_max_tokens: int = 128
+# Tensor parallelism size
+tensor_parallel_size: int = 1
+
+# GPU memory utilization fraction
+gpu_memory_utilization: float = 0.9
+
+# CPU swap space in GB
+swap_space: int = 4
+</code></pre>
+<h3 id="generation-configuration"><a class="header" href="#generation-configuration">Generation Configuration</a></h3>
+<pre><code class="language-python"># Default maximum tokens to generate per request
+default_max_tokens: int = 1024
 
 # Default sampling temperature
 default_temperature: float = 1.0
 
 # Default top-p value
 default_top_p: float = 1.0
+</code></pre>
+<h3 id="sglang-specific-features"><a class="header" href="#sglang-specific-features">SGLang-Specific Features</a></h3>
+<pre><code class="language-python"># Enable radix attention cache for prefix sharing
+enable_radix_cache: bool = True
+
+# Enable chunked prefill for long prompts
+enable_chunked_prefill: bool = True
+
+# Scheduling policy: "fcfs" (first-come-first-served)
+schedule_policy: str = "fcfs"
+
+# Enable prefix caching
+enable_prefix_caching: bool = True
+
+# Maximum scheduling steps before preemption
+max_num_schedule_steps: int = 1000
 </code></pre>
 <h2 id="configuration-loading"><a class="header" href="#configuration-loading">Configuration Loading</a></h2>
 <h3 id="default-configuration"><a class="header" href="#default-configuration">Default Configuration</a></h3>
@@ -283,17 +309,26 @@ max_batch_size = 4
 </code></pre>
 <h2 id="integration-with-components"><a class="header" href="#integration-with-components">Integration with Components</a></h2>
 <h3 id="engine-integration"><a class="header" href="#engine-integration">Engine Integration</a></h3>
-<p>The main engine reads configuration parameters during initialization:</p>
-<pre><code class="language-python">def __init__(self, model_name: str, config: Optional[Config] = None):
-    self.config = config or self._get_default_config()
-    # Initialize components with config values
-    self.scheduler = SGLangScheduler(
-        max_batch_size=self.config.max_batch_size,
-        max_prefill_batch_size=self.config.max_prefill_batch_size,
-        max_decode_batch_size=self.config.max_decode_batch_size
-    )
+<p>The main engine uses the SGLangConfig for initialization:</p>
+<pre><code class="language-python">from src.config import SGLangConfig, get_sglang_config
+
+# Use default config
+config = get_sglang_config()
+
+# Or override specific parameters
+config = get_sglang_config(
+    max_batch_size=16,
+    num_gpu_blocks=4000
+)
+
+# Initialize components with config values
+scheduler = SGLangScheduler(
+    max_batch_size=config.max_batch_size,
+    max_prefill_batch_size=config.max_prefill_batch_size,
+    max_decode_batch_size=config.max_decode_batch_size
+)
 </code></pre>
-<h3 id="scheduler-configuration"><a class="header" href="#scheduler-configuration">Scheduler Configuration</a></h3>
+<h3 id="scheduler-configuration-1"><a class="header" href="#scheduler-configuration-1">Scheduler Configuration</a></h3>
 <p>The SGLang scheduler uses configuration for scheduling policies:</p>
 <ul>
 <li>Batch size limits</li>
