@@ -1,85 +1,6 @@
 import os
 from pathlib import Path
 from setuptools import setup, find_packages
-from torch.utils.cpp_extension import CUDAExtension, BuildExtension
-
-
-def get_extensions():
-    """Conditionally create CUDA extensions if CUDA is available and files exist."""
-    extensions = []
-
-    # Check if we have the CUDA kernel files
-    cuda_dir = Path("src/kernels/cuda")
-    kernel_files_exist = (
-        (cuda_dir / "flash_attention.cu").exists() and
-        (cuda_dir / "flash_attention_cpu.cpp").exists()
-    )
-
-    if not kernel_files_exist:
-        print("CUDA kernel files not found, skipping CUDA extensions")
-        return extensions
-
-    try:
-        import torch
-        # Check for CUDA availability, but handle version mismatch gracefully
-        try:
-            cuda_available = torch.cuda.is_available()
-        except RuntimeError as e:
-            if "mismatches the version that was used to compile" in str(e) or "The detected CUDA version" in str(e):
-                print(f"CUDA version mismatch detected: {e}")
-                print("Skipping CUDA extensions and using CPU only")
-                return extensions
-            else:
-                raise e  # Re-raise if it's a different error
-
-        if cuda_available:
-            arch_flags = []
-            # Get the compute capability of the first available GPU
-            if torch.cuda.is_available():
-                major, minor = torch.cuda.get_device_capability(0)
-                arch_flag = f"-gencode=arch=compute_{major}{minor},code=sm_{major}{minor}"
-                arch_flags = [arch_flag]
-
-            extensions.extend([
-                CUDAExtension(
-                    name="mini_yaie_kernels.flash_attention",
-                    sources=[
-                        "src/kernels/cuda/flash_attention.cu",
-                        "src/kernels/cuda/flash_attention_cpu.cpp",
-                    ],
-                    extra_compile_args={"cxx": ["-O3"], "nvcc": ["-O3"] + arch_flags},
-                ),
-                CUDAExtension(
-                    name="mini_yaie_kernels.paged_attention",
-                    sources=[
-                        "src/kernels/cuda/paged_attention.cu",
-                        "src/kernels/cuda/paged_attention_cpu.cpp",
-                    ],
-                    extra_compile_args={"cxx": ["-O3"], "nvcc": ["-O3"] + arch_flags},
-                ),
-                CUDAExtension(
-                    name="mini_yaie_kernels.radix_attention",
-                    sources=[
-                        "src/kernels/cuda/radix_attention.cu",
-                        "src/kernels/cuda/radix_attention_cpu.cpp",
-                    ],
-                    extra_compile_args={"cxx": ["-O3"], "nvcc": ["-O3"] + arch_flags},
-                ),
-                CUDAExtension(
-                    name="mini_yaie_kernels.memory_ops",
-                    sources=[
-                        "src/kernels/cuda/memory_ops.cu",
-                        "src/kernels/cuda/memory_ops_cpu.cpp",
-                    ],
-                    extra_compile_args={"cxx": ["-O3"], "nvcc": ["-O3"] + arch_flags},
-                ),
-            ])
-        else:
-            print("CUDA not available, skipping CUDA extensions")
-    except ImportError:
-        print("PyTorch not available, skipping CUDA extensions")
-
-    return extensions
 
 
 def get_package_data():
@@ -87,7 +8,7 @@ def get_package_data():
     package_data = []
     cuda_dir = Path("src/kernels/cuda")
 
-    # Include CUDA related files if they exist
+    # Include CUDA related files if they exist (for distribution)
     cuda_files = ["*.cu", "*.cpp", "*.h", "*.hpp"]
     for pattern in cuda_files:
         import glob
@@ -98,10 +19,7 @@ def get_package_data():
     return {"src": package_data}
 
 
-# Get extensions
-extensions = get_extensions()
-
-# Setup the package
+# Setup the package without CUDA extensions for now to avoid install issues
 setup(
     name="mini-yaie",
     version="0.1.0",
@@ -143,6 +61,5 @@ setup(
             "yaie = cli.main:main",
         ],
     },
-    ext_modules=extensions,
-    cmdclass={"build_ext": BuildExtension} if extensions else {},
+    # No CUDA extensions to avoid build issues with CUDA version mismatch
 )
