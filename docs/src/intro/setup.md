@@ -3,8 +3,8 @@
 ## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/YAIE.git
-cd YAIE
+git clone https://github.com/yourusername/Mini-YAIE.git
+cd Mini-YAIE
 ```
 
 ## 2. Python Environment

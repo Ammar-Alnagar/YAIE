@@ -6,16 +6,16 @@ Mini-YAIE uses a flexible configuration system that allows users to customize va
 
 ## Configuration Structure
 
-The configuration system is built around the main `config.py` file in the src directory. The system supports:
+The configuration system is built around the `SGLangConfig` dataclass in `src/config.py`. The system supports:
 
-- Environment variable overrides
+- Dataclass-based configuration with type hints
 - Default values for all parameters
-- Type checking and validation
+- Dictionary-based overrides
 - Component-specific configuration sections
 
 ## Key Configuration Parameters
 
-### Engine Configuration
+### Scheduler Configuration
 
 ```python
 # Maximum batch size for processing requests
@@ -31,33 +31,65 @@ max_decode_batch_size: int = 256
 max_seq_len: int = 2048
 ```
 
-### Memory Management Configuration
+### KV Cache Configuration
 
 ```python
-# Number of memory blocks in the KV-cache pool
-num_blocks: int = 2000
+# Number of GPU memory blocks for KV-cache
+num_gpu_blocks: int = 2000
+
+# Number of CPU memory blocks for swapping
+num_cpu_blocks: int = 1000
 
 # Size of each memory block (in tokens)
 block_size: int = 16
-
-# Data type for KV-cache storage
-dtype: torch.dtype = torch.float16
 ```
 
-### Model-Specific Configuration
+### Model Configuration
 
 ```python
-# Model name for HuggingFace loading
-model_name: str
+# Data type for model weights and KV-cache
+dtype: str = "float16"  # Options: "float16", "float32", "bfloat16"
 
-# Maximum tokens to generate per request
-default_max_tokens: int = 128
+# Tensor parallelism size
+tensor_parallel_size: int = 1
+
+# GPU memory utilization fraction
+gpu_memory_utilization: float = 0.9
+
+# CPU swap space in GB
+swap_space: int = 4
+```
+
+### Generation Configuration
+
+```python
+# Default maximum tokens to generate per request
+default_max_tokens: int = 1024
 
 # Default sampling temperature
 default_temperature: float = 1.0
 
 # Default top-p value
 default_top_p: float = 1.0
+```
+
+### SGLang-Specific Features
+
+```python
+# Enable radix attention cache for prefix sharing
+enable_radix_cache: bool = True
+
+# Enable chunked prefill for long prompts
+enable_chunked_prefill: bool = True
+
+# Scheduling policy: "fcfs" (first-come-first-served)
+schedule_policy: str = "fcfs"
+
+# Enable prefix caching
+enable_prefix_caching: bool = True
+
+# Maximum scheduling steps before preemption
+max_num_schedule_steps: int = 1000
 ```
 
 ## Configuration Loading
@@ -110,17 +142,26 @@ max_batch_size = 4
 
 ### Engine Integration
 
-The main engine reads configuration parameters during initialization:
+The main engine uses the SGLangConfig for initialization:
 
 ```python
-def __init__(self, model_name: str, config: Optional[Config] = None):
-    self.config = config or self._get_default_config()
-    # Initialize components with config values
-    self.scheduler = SGLangScheduler(
-        max_batch_size=self.config.max_batch_size,
-        max_prefill_batch_size=self.config.max_prefill_batch_size,
-        max_decode_batch_size=self.config.max_decode_batch_size
-    )
+from src.config import SGLangConfig, get_sglang_config
+
+# Use default config
+config = get_sglang_config()
+
+# Or override specific parameters
+config = get_sglang_config(
+    max_batch_size=16,
+    num_gpu_blocks=4000
+)
+
+# Initialize components with config values
+scheduler = SGLangScheduler(
+    max_batch_size=config.max_batch_size,
+    max_prefill_batch_size=config.max_prefill_batch_size,
+    max_decode_batch_size=config.max_decode_batch_size
+)
 ```
 
 ### Scheduler Configuration

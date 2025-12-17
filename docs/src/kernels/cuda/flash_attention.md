@@ -7,13 +7,13 @@ The main bottleneck in Attention is reading the huge $N \times N$ matrix from me
 
 ```mermaid
 graph TB
-    subgraph GlobalMemory [Global Memory (HBM)]
+    subgraph GlobalMemory[Global Memory HBM]
         Q[Matrix Q]
         K[Matrix K]
         V[Matrix V]
     end
 
-    subgraph SRAM [Shared Memory (SRAM)]
+    subgraph SRAM[Shared Memory SRAM]
         TileQ[Tile Q]
         TileK[Tile K]
         TileV[Tile V]

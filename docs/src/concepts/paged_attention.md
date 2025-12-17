@@ -19,19 +19,19 @@ Inspired by virtual memory in OS:
 
 ```mermaid
 graph LR
-    subgraph Logical["Logical Sequence (Request)"]
+    subgraph Logical[Logical Sequence Request]
         L0[Block 0: "Hello"]
         L1[Block 1: "World"]
         L2[Block 2: "!"]
     end
 
-    subgraph Table["Page Table"]
+    subgraph Table[Page Table]
         T0[0 -> 7]
         T1[1 -> 2]
         T2[2 -> 9]
     end
 
-    subgraph Physical["GPU Memory (Physical Blocks)"]
+    subgraph Physical[GPU Memory Physical Blocks]
         B0[Block 0]
         B1[Block 1]
         B2[Block 2: "World"]:::used
