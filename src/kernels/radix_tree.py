@@ -39,21 +39,18 @@ class RadixTree:
             request_id: ID of the request
             token_ids: Token IDs representing the prompt
         """
-        # TODO: Implement radix tree insertion for SGLang prefix sharing:
-        # 1. Traverse the tree following the token sequence
-        # 2. Create new nodes as needed
-        # 3. Add request ID to nodes along the path
-        # 4. Update path mappings for efficient lookup
         current = self.root
 
         # For each token in the sequence, navigate/create the path
+        # Add the request ID to each node along the path
         for token_id in token_ids:
             if token_id not in current.children:
                 current.children[token_id] = RadixTreeNode(token_id)
             current = current.children[token_id]
+            # Add request to this node along the path (for prefix matching)
+            if request_id not in current.request_ids:
+                current.request_ids.append(request_id)
 
-        # Add request to the terminal node
-        current.request_ids.append(request_id)
         current.is_terminal = True
 
         # Store mapping from request to its path

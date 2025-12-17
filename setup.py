@@ -21,7 +21,18 @@ def get_extensions():
 
     try:
         import torch
-        if torch.cuda.is_available():
+        # Check for CUDA availability, but handle version mismatch gracefully
+        try:
+            cuda_available = torch.cuda.is_available()
+        except RuntimeError as e:
+            if "mismatches the version that was used to compile" in str(e) or "The detected CUDA version" in str(e):
+                print(f"CUDA version mismatch detected: {e}")
+                print("Skipping CUDA extensions and using CPU only")
+                return extensions
+            else:
+                raise e  # Re-raise if it's a different error
+
+        if cuda_available:
             arch_flags = []
             # Get the compute capability of the first available GPU
             if torch.cuda.is_available():
