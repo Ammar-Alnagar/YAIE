@@ -2,8 +2,9 @@
 
 - [Introduction](intro/welcome.md)
 
-  - [Prerequisites](intro/prerequisites.md)
-  - [Environment Setup](intro/setup.md)
+   - [Prerequisites](intro/prerequisites.md)
+   - [Environment Setup](intro/setup.md)
+   - [Model Loading](intro/model_loading.md)
 
 - [Core Concepts](concepts/llm_inference.md)
 
@@ -13,9 +14,10 @@
 
 - [Architecture Deep Dive](architecture/system_overview.md)
 
-  - [Engine Orchestration](architecture/engine.md)
-  - [Scheduler Logic](architecture/scheduler.md)
-  - [Memory Management](architecture/memory_manager.md)
+   - [Configuration Management](architecture/configuration.md)
+   - [Engine Orchestration](architecture/engine.md)
+   - [Scheduler Logic](architecture/scheduler.md)
+   - [Memory Management](architecture/memory_manager.md)
 
 - [Python Kernels Guide](kernels/python/overview.md)
 

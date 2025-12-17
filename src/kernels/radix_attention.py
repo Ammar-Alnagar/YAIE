@@ -102,7 +102,9 @@ class RadixAttentionBlock(nn.Module):
         )  # [head_dim//2]
 
         # Calculate sin and cos embeddings
-        freqs = torch.einsum("i,j->ij", position_ids, inv_freq)  # [max_pos, head_dim//2]
+        freqs = torch.einsum(
+            "i,j->ij", position_ids, inv_freq
+        )  # [max_pos, head_dim//2]
         emb = torch.cat((freqs, freqs), dim=-1)  # [max_pos, head_dim]
 
         self.cos_cached = emb.cos().to(dtype=torch.float16)
@@ -158,11 +160,15 @@ class RadixAttentionBlock(nn.Module):
         sin_to_use = self.sin_cached[:seq_len].to(query.dtype)
 
         if position_ids is not None:
-            query, key = apply_rotary_pos_emb(query, key, cos_to_use, sin_to_use, position_ids)
+            query, key = apply_rotary_pos_emb(
+                query, key, cos_to_use, sin_to_use, position_ids
+            )
         else:
             # Use sequential positions if none provided
             pos_ids = torch.arange(seq_len, device=query.device).unsqueeze(0)
-            query, key = apply_rotary_pos_emb(query, key, cos_to_use, sin_to_use, pos_ids)
+            query, key = apply_rotary_pos_emb(
+                query, key, cos_to_use, sin_to_use, pos_ids
+            )
 
         # Handle past key-value caching
         if past_key_value is not None:
@@ -171,7 +177,9 @@ class RadixAttentionBlock(nn.Module):
 
         # For causal attention, we use scaled dot-product attention
         # Scaled attention: (Q @ K.T) / sqrt(head_dim)
-        attn_weights = torch.matmul(query, key.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(query, key.transpose(2, 3)) / math.sqrt(
+            self.head_dim
+        )
 
         # Apply attention mask if provided
         if attention_mask is not None:
@@ -180,14 +188,18 @@ class RadixAttentionBlock(nn.Module):
             attn_weights = attn_weights.masked_fill(expanded_mask == 0, float("-inf"))
 
         # Apply softmax to get attention probabilities
-        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
+            query.dtype
+        )
 
         # Apply attention to values
         attn_output = torch.matmul(attn_weights, value)
 
         # Transpose and reshape back to [batch_size, seq_len, hidden_size]
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
+        attn_output = attn_output.reshape(
+            batch_size, seq_len, self.num_heads * self.head_dim
+        )
 
         # Output projection
         output = self.o_proj(attn_output)
@@ -254,12 +266,18 @@ class RadixAttentionWithPagedKVCache:
 
             # Initialize key and value cache blocks
             self.key_cache_pool[block_id] = torch.zeros(
-                self.block_size, self.num_heads, self.head_dim,
-                dtype=torch.float16, device='cuda' if torch.cuda.is_available() else 'cpu'
+                self.block_size,
+                self.num_heads,
+                self.head_dim,
+                dtype=torch.float16,
+                device="cuda" if torch.cuda.is_available() else "cpu",
             )
             self.value_cache_pool[block_id] = torch.zeros(
-                self.block_size, self.num_heads, self.head_dim,
-                dtype=torch.float16, device='cuda' if torch.cuda.is_available() else 'cpu'
+                self.block_size,
+                self.num_heads,
+                self.head_dim,
+                dtype=torch.float16,
+                device="cuda" if torch.cuda.is_available() else "cpu",
             )
 
             allocated_block_ids.append(block_id)
@@ -268,83 +286,121 @@ class RadixAttentionWithPagedKVCache:
         return allocated_block_ids
 
     def append_slot(self, key: torch.Tensor, value: torch.Tensor, request_id: str):
-        """Append new key-value pairs to the cache for a request"""
+        """
+        Append new key-value pairs to the cache for a request
+
+        This method handles the complex task of storing new KV pairs in the paged memory system.
+        It manages block allocation, handles cases where data spans multiple blocks, and
+        ensures efficient memory usage by packing data into fixed-size blocks.
+
+        Args:
+            key: Key tensor to store [num_tokens, num_heads, head_dim] or [1, num_tokens, num_heads, head_dim]
+            value: Value tensor to store [num_tokens, num_heads, head_dim] or [1, num_tokens, num_heads, head_dim]
+            request_id: Request identifier for block mapping
+        """
+        # Ensure the request has allocated blocks in the paged memory system
         if request_id not in self.request_block_map:
-            # Allocate blocks for new request
-            num_new_blocks = 1  # Start with 1 block
+            # First-time allocation for this request - start with one block
+            num_new_blocks = 1
             self.allocate_blocks(request_id, num_new_blocks)
 
+        # Get the list of blocks currently allocated to this request
         block_ids = self.request_block_map[request_id]
 
-        # Find the right block to append to
-        # For simplicity, we add to the last block, but in a real system you'd manage this more efficiently
+        # Validate that blocks were actually allocated
         if len(block_ids) == 0:
             raise RuntimeError(f"No blocks allocated for request {request_id}")
 
+        # Use the last (most recent) block for appending new data
+        # In production systems, this might use more sophisticated block selection
         last_block_id = block_ids[-1]
-        block = self.key_cache_pool[last_block_id]
 
-        # Count how many slots are occupied in the last block
-        occupied_slots = min(block.shape[0], getattr(self, f"_slots_used_{last_block_id}", 0))
+        # Determine how many slots in the last block are already occupied
+        # This tracks the fill level of each block to know where to append new data
+        occupied_slots = min(
+            self.block_size, getattr(self, f"_slots_used_{last_block_id}", 0)
+        )
 
-        # If the last block is full, we may need to add more blocks
+        # Check if the last block is completely full and needs expansion
         if occupied_slots >= self.block_size:
-            # In a real system, we'd need expansion logic here
+            # Block is full - allocate a new block for this request
             new_block_id = self.next_block_index
             self.next_block_index += 1
 
-            # Initialize new block
+            # Initialize the new block with zeros in the appropriate shape and device
+            # Shape: [block_size, num_heads, head_dim] for efficient attention computation
             self.key_cache_pool[new_block_id] = torch.zeros(
-                self.block_size, self.num_heads, self.head_dim,
-                dtype=torch.float16, device='cuda' if torch.cuda.is_available() else 'cpu'
+                self.block_size,
+                self.num_heads,
+                self.head_dim,
+                dtype=torch.float16,
+                device="cuda" if torch.cuda.is_available() else "cpu",
             )
             self.value_cache_pool[new_block_id] = torch.zeros(
-                self.block_size, self.num_heads, self.head_dim,
-                dtype=torch.float16, device='cuda' if torch.cuda.is_available() else 'cpu'
+                self.block_size,
+                self.num_heads,
+                self.head_dim,
+                dtype=torch.float16,
+                device="cuda" if torch.cuda.is_available() else "cpu",
             )
 
+            # Add the new block to this request's block list and update mapping
             block_ids.append(new_block_id)
             self.request_block_map[request_id] = block_ids
             last_block_id = new_block_id
-            occupied_slots = 0
+            occupied_slots = 0  # New block starts empty
 
-        # Append to the current block
-        # Assuming key and value have shape [batch_size, num_tokens, num_heads, head_dim]
-        if key.dim() == 4 and key.shape[0] == 1:  # If batch dimension exists
-            key = key.squeeze(0)  # Remove batch dimension
+        # Prepare the key/value tensors for storage
+        # Handle different input tensor shapes that may come from the model
+        if key.dim() == 4 and key.shape[0] == 1:
+            # Remove singleton batch dimension if present
+            # Input shape: [1, num_tokens, num_heads, head_dim] -> [num_tokens, num_heads, head_dim]
+            key = key.squeeze(0)
             value = value.squeeze(0)
 
+        # Determine how many tokens we're adding (could be multiple tokens at once)
         num_tokens_to_add = key.shape[0] if key.dim() == 3 else 1
 
-        # Check if we need more blocks
+        # Check if the new data fits in the remaining space of the current block
         if occupied_slots + num_tokens_to_add > self.block_size:
-            # Need to split across blocks
+            # Data spans multiple blocks - split it across available blocks
+            # First, fill whatever space remains in the current block
             remaining_in_current = self.block_size - occupied_slots
             if remaining_in_current > 0:
-                # Fill remaining space in current block
-                self.key_cache_pool[last_block_id][occupied_slots:occupied_slots+remaining_in_current] = \
-                    key[:remaining_in_current]
-                self.value_cache_pool[last_block_id][occupied_slots:occupied_slots+remaining_in_current] = \
-                    value[:remaining_in_current]
+                # Fill the remaining slots in the current block
+                self.key_cache_pool[last_block_id][
+                    occupied_slots : occupied_slots + remaining_in_current
+                ] = key[:remaining_in_current]
+                self.value_cache_pool[last_block_id][
+                    occupied_slots : occupied_slots + remaining_in_current
+                ] = value[:remaining_in_current]
 
                 # Allocate more blocks for the rest
                 remaining_keys = key[remaining_in_current:]
                 remaining_values = value[remaining_in_current:]
 
                 # Allocate additional blocks as needed
-                additional_blocks_needed = (remaining_keys.shape[0] + self.block_size - 1) // self.block_size
+                additional_blocks_needed = (
+                    remaining_keys.shape[0] + self.block_size - 1
+                ) // self.block_size
                 for i in range(additional_blocks_needed):
                     new_block_id = self.next_block_index
                     self.next_block_index += 1
 
                     # Initialize new block
                     self.key_cache_pool[new_block_id] = torch.zeros(
-                        self.block_size, self.num_heads, self.head_dim,
-                        dtype=torch.float16, device='cuda' if torch.cuda.is_available() else 'cpu'
+                        self.block_size,
+                        self.num_heads,
+                        self.head_dim,
+                        dtype=torch.float16,
+                        device="cuda" if torch.cuda.is_available() else "cpu",
                     )
                     self.value_cache_pool[new_block_id] = torch.zeros(
-                        self.block_size, self.num_heads, self.head_dim,
-                        dtype=torch.float16, device='cuda' if torch.cuda.is_available() else 'cpu'
+                        self.block_size,
+                        self.num_heads,
+                        self.head_dim,
+                        dtype=torch.float16,
+                        device="cuda" if torch.cuda.is_available() else "cpu",
                     )
 
                     block_ids.append(new_block_id)
@@ -355,12 +411,20 @@ class RadixAttentionWithPagedKVCache:
                     end_idx = min(start_idx + self.block_size, remaining_keys.shape[0])
                     tokens_to_add = end_idx - start_idx
                     if tokens_to_add > 0:
-                        self.key_cache_pool[new_block_id][:tokens_to_add] = remaining_keys[start_idx:end_idx]
-                        self.value_cache_pool[new_block_id][:tokens_to_add] = remaining_values[start_idx:end_idx]
+                        self.key_cache_pool[new_block_id][:tokens_to_add] = (
+                            remaining_keys[start_idx:end_idx]
+                        )
+                        self.value_cache_pool[new_block_id][:tokens_to_add] = (
+                            remaining_values[start_idx:end_idx]
+                        )
         else:
             # We can fit in the current block
-            self.key_cache_pool[last_block_id][occupied_slots:occupied_slots+num_tokens_to_add] = key
-            self.value_cache_pool[last_block_id][occupied_slots:occupied_slots+num_tokens_to_add] = value
+            self.key_cache_pool[last_block_id][
+                occupied_slots : occupied_slots + num_tokens_to_add
+            ] = key
+            self.value_cache_pool[last_block_id][
+                occupied_slots : occupied_slots + num_tokens_to_add
+            ] = value
 
     def get_kv_cache(
         self, request_ids: List[str], seq_lens: List[int]
@@ -368,24 +432,32 @@ class RadixAttentionWithPagedKVCache:
         """Get key-value cache for specified requests"""
         if not request_ids:
             # Return empty tensors if no request IDs
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            device = "cuda" if torch.cuda.is_available() else "cpu"
             return (
                 torch.empty(0, 0, self.num_heads, self.head_dim, device=device),
-                torch.empty(0, 0, self.num_heads, self.head_dim, device=device)
+                torch.empty(0, 0, self.num_heads, self.head_dim, device=device),
             )
 
         # Calculate total number of tokens needed
         total_tokens = sum(seq_lens)
 
         # Initialize output tensors
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         all_keys = torch.zeros(
-            1, total_tokens, self.num_heads, self.head_dim,
-            dtype=torch.float16, device=device
+            1,
+            total_tokens,
+            self.num_heads,
+            self.head_dim,
+            dtype=torch.float16,
+            device=device,
         )
         all_values = torch.zeros(
-            1, total_tokens, self.num_heads, self.head_dim,
-            dtype=torch.float16, device=device
+            1,
+            total_tokens,
+            self.num_heads,
+            self.head_dim,
+            dtype=torch.float16,
+            device=device,
         )
 
         # Collect keys and values from all requests
@@ -403,7 +475,9 @@ class RadixAttentionWithPagedKVCache:
                     block_val = self.value_cache_pool[block_id]
 
                     # Only take up to the required sequence length
-                    tokens_from_this_block = min(block_key.shape[0], seq_len - len(req_keys) * self.block_size)
+                    tokens_from_this_block = min(
+                        block_key.shape[0], seq_len - len(req_keys) * self.block_size
+                    )
                     if tokens_from_this_block > 0:
                         req_keys.append(block_key[:tokens_from_this_block])
                         req_values.append(block_val[:tokens_from_this_block])
@@ -419,8 +493,12 @@ class RadixAttentionWithPagedKVCache:
                     # Add to all tensors
                     tokens_to_copy = min(seq_len, all_keys.shape[1] - current_token_idx)
                     if tokens_to_copy > 0:
-                        all_keys[0, current_token_idx:current_token_idx+tokens_to_copy] = req_keys_tensor[:tokens_to_copy]
-                        all_values[0, current_token_idx:current_token_idx+tokens_to_copy] = req_values_tensor[:tokens_to_copy]
+                        all_keys[
+                            0, current_token_idx : current_token_idx + tokens_to_copy
+                        ] = req_keys_tensor[:tokens_to_copy]
+                        all_values[
+                            0, current_token_idx : current_token_idx + tokens_to_copy
+                        ] = req_values_tensor[:tokens_to_copy]
                         current_token_idx += tokens_to_copy
 
         return all_keys, all_values

@@ -49,15 +49,12 @@ class Scheduler:
         self.running_requests: List[Request] = []
         self.completed_requests: List[Request] = []
 
-        # TODO: Implement more sophisticated scheduling algorithm
-        # This is where you'll implement continuous batching logic similar to SGLang
-        # Key components to implement:
-        # 1. Efficient request batching
-        # 2. Memory management for KV caches
-        # 3. Radix attention integration for shared prefixes
-        # 4. Preemption and re-scheduling mechanisms
-        # 5. Chunked prefill if needed
-        pass
+        # Scheduling components for sophisticated logic
+        self.max_prefill_batch_size = max_batch_size * 2  # Allow more prefill requests
+        self.max_decode_batch_size = max_batch_size
+        self.prefill_requests: List[Request] = []  # Requests ready for prefill
+        self.decode_requests: List[Request] = []    # Requests ready for decode
+        self.request_lookup: Dict[str, Request] = {}  # Fast lookup
 
     def add_request(self, prompt: str, max_tokens: int = 128, temperature: float = 1.0, top_p: float = 1.0) -> str:
         """
@@ -84,20 +81,62 @@ class Scheduler:
         )
 
         self.pending_requests.append(request)
+        self.request_lookup[req_id] = request  # Add to lookup for fast access
         return req_id
 
     def schedule_step(self):
         """
         Perform one scheduling step - batch and dispatch requests for inference
+        Implements sophisticated scheduling with separate prefill and decode phases
         """
-        # TODO: Implement the scheduling algorithm
-        # 1. Select requests from pending queue up to max_batch_size
-        # 2. Group requests with similar characteristics (sequence lengths, etc.)
-        # 3. Prepare batch for inference (concatenate inputs, manage KV-cache positions)
-        # 4. Pass batch to model for processing
-        # 5. Update request states based on results
-        # 6. Move completed requests to completed queue
-        pass
+        # 1. Process any completed requests from the previous step
+        # (This is a simplified implementation; in a full system, this would be
+        #  handled by the inference backend)
+        completed_this_step = []
+
+        # Check running requests for completion
+        for req in list(self.running_requests):  # Use list() to avoid modification during iteration
+            if req.current_position >= req.max_tokens:
+                req.status = RequestStatus.COMPLETED
+                self.running_requests.remove(req)
+                self.completed_requests.append(req)
+                completed_this_step.append(req)
+
+        # 2. Prioritize decode requests (lower latency)
+        decode_batch = []
+        if self.running_requests:
+            # Select decode requests from running ones
+            for req in self.running_requests[:self.max_decode_batch_size]:
+                if req.status == RequestStatus.RUNNING:
+                    decode_batch.append(req)
+
+        # 3. Fill remaining capacity with prefill requests
+        remaining_capacity = self.max_batch_size - len(decode_batch)
+        prefill_batch = []
+
+        if remaining_capacity > 0 and self.pending_requests:
+            # Move some pending requests to prefill
+            for req in self.pending_requests[:remaining_capacity]:
+                req.status = RequestStatus.RUNNING
+                self.pending_requests.remove(req)
+                self.running_requests.append(req)
+                prefill_batch.append(req)
+
+        # 4. Prepare the full batch (prefill + decode)
+        batch = prefill_batch + decode_batch
+
+        # 5. Update request positions for decode steps
+        for req in decode_batch:
+            req.current_position += 1
+
+        # This is where you'd send the batch to the inference engine
+        # For now, we just return the batch information
+        return {
+            "prefill_batch": prefill_batch,
+            "decode_batch": decode_batch,
+            "total_batch_size": len(batch),
+            "batch": batch
+        }
 
     def get_request_result(self, req_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -118,6 +157,19 @@ class Scheduler:
                     "status": req.status.value,
                     "created_at": req.created_at
                 }
+
+        # Also check if it's still in progress
+        for req in self.pending_requests + self.running_requests:
+            if req.id == req_id:
+                return {
+                    "id": req.id,
+                    "output": req.output_ids,
+                    "status": req.status.value,
+                    "current_position": req.current_position,
+                    "max_tokens": req.max_tokens,
+                    "created_at": req.created_at
+                }
+
         return None
 
     def get_active_request_count(self) -> int:

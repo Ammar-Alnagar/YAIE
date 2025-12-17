@@ -142,13 +142,34 @@ class SGLangScheduler:
     def _calculate_prefix_hash(self, prompt: str) -> Optional[str]:
         """
         Calculate a hash representing the common prefix for SGLang grouping
-        For this educational implementation, we use the hash of the prompt string.
+        This implementation should hash the token IDs of the prefix to enable grouping
+        of requests that have similar token sequences.
         """
         if not prompt:
             return None
-        # In a real implementation we would hash the token IDs of the prefix
-        # Here we just hash the prompt string for simplicity in the non-kernel code
-        return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+
+        # In a real implementation we would tokenize the prompt and hash the tokens
+        # For this educational implementation, let's simulate a more realistic approach
+        # where we use a consistent tokenizer or simulate tokenization
+
+        # For this example, we'll hash the first few words/tokens of the prompt
+        # to simulate how prefixes would be grouped in a real SGLang system
+        try:
+            # This is a simplified version - in practice you'd use a proper tokenizer
+            # and hash the actual token IDs to identify shared prefixes
+            words = prompt.split()
+            if len(words) > 0:
+                # Use first few words as the prefix for grouping
+                prefix = " ".join(words[:min(5, len(words))])  # Use first 5 words as prefix
+                token_sequence = prefix  # In real implementation, this would be token IDs
+            else:
+                token_sequence = prompt  # If no spaces, use full prompt
+
+            # Return hash of the token sequence/prefix
+            return hashlib.sha256(token_sequence.encode("utf-8")).hexdigest()
+        except:
+            # Fallback to original approach if there's an error
+            return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
     def schedule_step(self) -> Tuple[List[Request], List[Request]]:
         """
