@@ -32,6 +32,7 @@
   - [Flash Attention](kernels/cuda/flash_attention.md)
   - [Paged Attention](kernels/cuda/paged_attention.md)
   - [Radix Operations](kernels/cuda/radix_ops.md)
+  - [Implementation Guide](kernels/cuda/implementation_guide.md)
 
 - [API & Serving](serving/api_endpoints.md)
 
