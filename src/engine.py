@@ -236,3 +236,108 @@ class InferenceEngine:
         }
 
         return response_dict
+
+    def chat_completion_stream(self, messages: List[Dict[str, str]], **kwargs):
+        """
+        Generate a streaming chat completion response from a list of messages.
+
+        Args:
+            messages: List of message dictionaries with 'role' and 'content' keys
+            **kwargs: Additional generation parameters (temperature, top_p, max_tokens, etc.)
+
+        Yields:
+            Dictionary containing the streaming chat completion chunks in OpenAI format
+        """
+        import time
+        import uuid
+
+        # Format messages into a single prompt
+        if hasattr(self.tokenizer, 'apply_chat_template'):
+            formatted_prompt = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
+            )
+        else:
+            formatted_prompt = ""
+            for message in messages:
+                formatted_prompt += f"{message['role'].capitalize()}: {message['content']}\n"
+            formatted_prompt += "\nAssistant:"
+
+        # Tokenize the prompt
+        input_ids = self.tokenizer(formatted_prompt, return_tensors="pt").input_ids.to(self.model.device)
+
+        # Use generation parameters
+        max_new_tokens = kwargs.get('max_tokens', 512)
+        temperature = kwargs.get('temperature', 1.0)
+        top_p = kwargs.get('top_p', 1.0)
+
+        current_ids = input_ids
+        generated_tokens = []
+
+        # Generate token by token
+        for i in range(max_new_tokens):
+            with torch.no_grad():
+                outputs = self.model(current_ids)
+                next_token_logits = outputs.logits[:, -1, :]  # Get last token logits
+
+            # Use our sampling kernel
+            sampling_kernel = SamplingKernel()
+            next_token_id = sampling_kernel.sample(
+                next_token_logits,
+                temperature=temperature,
+                top_p=top_p
+            )
+
+            # Check for EOS token
+            if next_token_id.item() == self.tokenizer.eos_token_id:
+                break
+
+            # Add to generated sequence
+            generated_tokens.append(next_token_id.item())
+
+            # Decode and yield the token
+            new_token_text = self.tokenizer.decode([next_token_id.item()], skip_special_tokens=True)
+
+            # Create streaming chunk
+            chunk = {
+                "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": self.model_name,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "content": new_token_text
+                        },
+                        "finish_reason": None
+                    }
+                ]
+            }
+
+            yield chunk
+
+            # Update current_ids for next iteration
+            if next_token_id.dim() == 1:
+                next_token_tensor = next_token_id.unsqueeze(0)  # Shape becomes [1, 1]
+            else:
+                next_token_tensor = next_token_id
+            current_ids = torch.cat([current_ids, next_token_tensor], dim=-1)
+
+        # Send final chunk with finish_reason
+        final_chunk = {
+            "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": self.model_name,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {},
+                    "finish_reason": "stop"
+                }
+            ]
+        }
+
+        yield final_chunk
