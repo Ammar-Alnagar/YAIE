@@ -143,14 +143,28 @@ class InferenceEngine:
 
                 # Add to generated sequence
                 generated_tokens.append(next_token_id.item())
-                current_ids = torch.cat([current_ids, next_token_id.unsqueeze(0).unsqueeze(0)], dim=-1)
+
+                # next_token_id from sampling is typically a 1D tensor with shape [1],
+                # but current_ids has shape [batch, seq_len] - typically [1, seq_len]
+                # For concatenation along sequence dimension (dim=-1), both must have same number of dimensions
+                if next_token_id.dim() == 1:
+                    # If next_token_id is 1D, reshape it to match [batch, 1] format
+                    next_token_tensor = next_token_id.unsqueeze(0)  # Shape becomes [1, 1]
+                else:
+                    # If already correct dimension, keep as is
+                    next_token_tensor = next_token_id
+
+                # Now concatenate along the sequence dimension
+                current_ids = torch.cat([current_ids, next_token_tensor], dim=-1)
 
                 # Check for EOS token
                 if next_token_id.item() == self.tokenizer.eos_token_id:
                     break
 
             # Decode the full sequence
-            full_sequence = torch.cat([input_ids.squeeze(0), torch.tensor(generated_tokens)], dim=0)
+            # Move generated_tokens tensor to the same device as input_ids
+            generated_tokens_tensor = torch.tensor(generated_tokens, device=input_ids.device)
+            full_sequence = torch.cat([input_ids.squeeze(0), generated_tokens_tensor], dim=0)
 
             # Extract just the generated part (not the original prompt)
             prompt_length = len(self.tokenizer.encode(request.prompt))
