@@ -54,10 +54,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b58c91dd.js";
+            window.path_to_searchindex_js = "../searchindex-d63bbf73.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-676105c4.js"></script>
+        <script src="../toc-44f1b166.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,33 +196,224 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="the-scheduler-coresglang_schedulerpy"><a class="header" href="#the-scheduler-coresglang_schedulerpy">The Scheduler (<code>core/sglang_scheduler.py</code>)</a></h1>
-<p>The <code>SGLangScheduler</code> is the “Brain”. It decides <em>what</em> runs <em>when</em>.</p>
-<h2 id="sglang-features"><a class="header" href="#sglang-features">SGLang Features</a></h2>
-<p>Unlike a simple FIFO queue, this scheduler is aware of <strong>Radix Attention</strong>.</p>
-<h3 id="prefix-hashing"><a class="header" href="#prefix-hashing">Prefix Hashing</a></h3>
-<p>When a request arrives, <code>_calculate_prefix_hash</code> identifies its common prefix.</p>
-<pre><code class="language-python"># Simplified Logic
-prefix_hash = sha256(prompt)
+                        <h1 id="scheduler-logic-sglang-style-request-management"><a class="header" href="#scheduler-logic-sglang-style-request-management">Scheduler Logic: SGLang-Style Request Management</a></h1>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The SGLang-style scheduler (<code>core/sglang_scheduler.py</code>) implements advanced request scheduling with prefix grouping and computation sharing capabilities. Unlike traditional schedulers, this implementation focuses on maximizing computational efficiency by identifying and leveraging shared prefixes among different requests.</p>
+<h2 id="key-concepts"><a class="header" href="#key-concepts">Key Concepts</a></h2>
+<h3 id="request-states"><a class="header" href="#request-states">Request States</a></h3>
+<p>The scheduler manages requests through several states:</p>
+<ul>
+<li><strong>PENDING</strong>: New requests awaiting initial processing</li>
+<li><strong>SCHEDULED_PREFILL</strong>: Requests ready for prefill phase</li>
+<li><strong>RUNNING_PREFILL</strong>: Currently processing full prompts</li>
+<li><strong>SCHEDULED_DECODE</strong>: Requests ready for token generation</li>
+<li><strong>RUNNING_DECODE</strong>: Currently generating tokens</li>
+<li><strong>COMPLETED</strong>: Finished requests</li>
+<li><strong>CANCELLED</strong>: Cancelled requests</li>
+</ul>
+<h3 id="prefix-based-grouping"><a class="header" href="#prefix-based-grouping">Prefix-Based Grouping</a></h3>
+<p>The scheduler uses prefix hashing to group requests with common prefixes:</p>
+<pre><code class="language-python">def _calculate_prefix_hash(self, prompt: str) -&gt; Optional[str]:
+    # Calculate hash to identify common prefixes
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 </code></pre>
-<p>In a full implementation, this uses the Radix Tree to find the precise token match.</p>
-<h3 id="scheduling-policy"><a class="header" href="#scheduling-policy">Scheduling Policy</a></h3>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<h3 id="core-data-structures"><a class="header" href="#core-data-structures">Core Data Structures</a></h3>
+<h4 id="request-management"><a class="header" href="#request-management">Request Management</a></h4>
+<pre><code class="language-python"># Separate queues for different processing phases
+self.pending_requests: List[Request] = []
+self.prefill_requests: List[Request] = []
+self.running_prefill: List[Request] = []
+self.decode_requests: List[Request] = []
+self.running_decode: List[Request] = []
+self.completed_requests: List[Request] = []
+</code></pre>
+<h4 id="prefix-grouping"><a class="header" href="#prefix-grouping">Prefix Grouping</a></h4>
+<pre><code class="language-python"># Group requests by common prefixes for shared computation
+self.prefix_groups: Dict[str, List[Request]] = defaultdict(list)
+self.request_lookup: Dict[str, Request] = {}
+</code></pre>
+<h3 id="scheduling-strategy"><a class="header" href="#scheduling-strategy">Scheduling Strategy</a></h3>
+<p>The scheduler implements a SGLang-inspired strategy:</p>
 <ol>
-<li><strong>Prioritize Decode</strong>: To minimize latency, we always try to run pending decode steps first.</li>
-<li><strong>Fill with Prefill</strong>: If there is leftover GPU memory (or batch size capacity), we pull new requests from the queue for prefill.</li>
+<li><strong>Prioritize Decode Requests</strong>: Minimize token-to-token latency</li>
+<li><strong>Maximize Prefill Efficiency</strong>: Process new requests efficiently</li>
+<li><strong>Leverage Prefix Sharing</strong>: Share computation for similar requests</li>
+<li><strong>Memory-Aware Scheduling</strong>: Respect KV-cache limitations</li>
 </ol>
-<pre><code class="language-mermaid">stateDiagram-v2
-    [*] --&gt; Pending
-    Pending --&gt; RunningPrefill : schedule_step()
-    RunningPrefill --&gt; ScheduledDecode : process_prefill()
-    ScheduledDecode --&gt; RunningDecode : schedule_step()
-    RunningDecode --&gt; ScheduledDecode : Not Finished
-    RunningDecode --&gt; Completed : Finished
-    Completed --&gt; [*]
+<h2 id="detailed-implementation"><a class="header" href="#detailed-implementation">Detailed Implementation</a></h2>
+<h3 id="request-lifecycle"><a class="header" href="#request-lifecycle">Request Lifecycle</a></h3>
+<h4 id="1-request-addition"><a class="header" href="#1-request-addition">1. Request Addition</a></h4>
+<pre><code class="language-python">def add_request(self, prompt: str, max_tokens: int = 128, ...) -&gt; str:
+    # Calculate prefix hash for grouping
+    prefix_hash = self._calculate_prefix_hash(prompt)
+    # Add to prefix group if applicable
+    if prefix_hash:
+        self.prefix_groups[prefix_hash].append(request)
+        request.request_group = prefix_hash
 </code></pre>
-<h2 id="state-machine"><a class="header" href="#state-machine">State Machine</a></h2>
-<p>Requests transition through states:
-<code>PENDING</code> -&gt; <code>RUNNING_PREFILL</code> -&gt; <code>SCHEDULED_DECODE</code> -&gt; <code>RUNNING_DECODE</code> -&gt; <code>COMPLETED</code></p>
+<h4 id="2-scheduling-step"><a class="header" href="#2-scheduling-step">2. Scheduling Step</a></h4>
+<pre><code class="language-python">def schedule_step(self) -&gt; Tuple[List[Request], List[Request]]:
+    # First, prioritize decode requests
+    decode_batch = []
+    prefill_batch = []
+    
+    # Calculate remaining capacity after decode allocation
+    remaining_capacity = self.max_batch_size - len(decode_batch)
+    
+    # Fill remaining capacity with prefill requests
+    if remaining_capacity &gt; 0:
+        num_prefills = min(len(prefill_candidates), remaining_capacity, self.max_prefill_batch_size)
+        prefill_batch = prefill_candidates[:num_prefills]
+</code></pre>
+<h3 id="batch-selection-policy"><a class="header" href="#batch-selection-policy">Batch Selection Policy</a></h3>
+<p>The scheduler implements a multi-level priority system:</p>
+<ol>
+<li><strong>Decode Priority</strong>: Continue existing generation to minimize latency</li>
+<li><strong>Prefill Efficiency</strong>: Process new requests in efficient batches</li>
+<li><strong>Memory Management</strong>: Ensure sufficient KV-cache for all requests</li>
+<li><strong>Prefix Sharing</strong>: Group similar requests for computation sharing</li>
+</ol>
+<h3 id="prefill-processing"><a class="header" href="#prefill-processing">Prefill Processing</a></h3>
+<p>Prefill requests undergo full prompt processing:</p>
+<pre><code class="language-python">def process_prefill_batch(self, requests: List[Request]) -&gt; List[Request]:
+    for req in requests:
+        # Process full prompt in one forward pass
+        req.status = RequestStatus.SCHEDULED_DECODE
+        # Initialize output sequence
+        if req.output_ids is None:
+            req.output_ids = []
+</code></pre>
+<h3 id="decode-processing"><a class="header" href="#decode-processing">Decode Processing</a></h3>
+<p>Decode requests generate tokens one-by-one:</p>
+<pre><code class="language-python">def process_decode_batch(self, requests: List[Request]) -&gt; List[Request]:
+    for req in requests:
+        # Get logits from model (simplified)
+        dummy_logits = torch.randn(1, 1000)
+        
+        # Sample next token using kernel
+        next_token_tensor = self.sampling_kernel.sample(
+            dummy_logits,
+            temperature=req.temperature,
+            top_p=req.top_p
+        )
+        
+        # Update position and check termination
+        req.current_position += 1
+        if req.current_position &gt;= req.max_tokens:
+            req.status = RequestStatus.COMPLETED
+</code></pre>
+<h2 id="sglang-style-optimizations"><a class="header" href="#sglang-style-optimizations">SGLang-Style Optimizations</a></h2>
+<h3 id="1-computation-sharing"><a class="header" href="#1-computation-sharing">1. Computation Sharing</a></h3>
+<p>The scheduler identifies requests with shared prefixes:</p>
+<pre><code class="language-python">def find_shared_prefixes(self, token_ids: List[int]) -&gt; Tuple[List[str], List[int]]:
+    # Traverse radix tree to find matching prefixes
+    # Return requests that can share computation
+</code></pre>
+<h3 id="2-memory-aware-scheduling"><a class="header" href="#2-memory-aware-scheduling">2. Memory-Aware Scheduling</a></h3>
+<p>The scheduler connects to the memory manager for KV-cache coordination:</p>
+<pre><code class="language-python">def connect_memory_manager(self, memory_manager):
+    self.memory_manager = memory_manager
+</code></pre>
+<h3 id="3-continuous-batching"><a class="header" href="#3-continuous-batching">3. Continuous Batching</a></h3>
+<p>The scheduler maintains continuous processing by balancing prefill and decode requests:</p>
+<ul>
+<li>Decode requests have higher priority (latency-sensitive)</li>
+<li>Prefill requests fill remaining batch capacity</li>
+<li>Memory requirements are considered during scheduling</li>
+</ul>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<h3 id="batch-size-optimization"><a class="header" href="#batch-size-optimization">Batch Size Optimization</a></h3>
+<p>The scheduler uses different batch size limits:</p>
+<ul>
+<li><code>max_prefill_batch_size</code>: Limits prefill batch size for memory efficiency</li>
+<li><code>max_decode_batch_size</code>: Larger limit for decode due to smaller memory footprint</li>
+<li><code>max_batch_size</code>: Overall system limit</li>
+</ul>
+<h3 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h3>
+<p>The scheduler coordinates with the KV-cache manager to:</p>
+<ul>
+<li>Allocate blocks for new requests</li>
+<li>Track memory usage during processing</li>
+<li>Ensure sufficient memory for scheduled requests</li>
+</ul>
+<h2 id="integration-with-other-components"><a class="header" href="#integration-with-other-components">Integration with Other Components</a></h2>
+<h3 id="memory-manager-integration"><a class="header" href="#memory-manager-integration">Memory Manager Integration</a></h3>
+<pre><code class="language-python">def process_prefill_batch(self, requests: List[Request]) -&gt; List[Request]:
+    if self.memory_manager:
+        # Allocate KV cache blocks for requests
+        pass
+</code></pre>
+<h3 id="sampling-kernel-integration"><a class="header" href="#sampling-kernel-integration">Sampling Kernel Integration</a></h3>
+<pre><code class="language-python">def process_decode_batch(self, requests: List[Request]) -&gt; List[Request]:
+    # Use sampling kernel for token selection
+    next_token_tensor = self.sampling_kernel.sample(...)
+</code></pre>
+<h2 id="request-status-monitoring"><a class="header" href="#request-status-monitoring">Request Status Monitoring</a></h2>
+<h3 id="queue-status"><a class="header" href="#queue-status">Queue Status</a></h3>
+<p>The scheduler provides detailed status information:</p>
+<pre><code class="language-python">def get_queue_status(self) -&gt; Dict[str, int]:
+    return {
+        "pending": len(self.pending_requests),
+        "prefill_queue": len(self.prefill_requests),
+        "running_prefill": len(self.running_prefill),
+        "decode_queue": len(self.decode_requests),
+        "running_decode": len(self.running_decode),
+        "completed": len(self.completed_requests),
+        "total_active": self.get_active_request_count(),
+    }
+</code></pre>
+<h3 id="request-result-access"><a class="header" href="#request-result-access">Request Result Access</a></h3>
+<pre><code class="language-python">def get_request_result(self, req_id: str) -&gt; Optional[Dict[str, Any]]:
+    # Check completed requests for results
+</code></pre>
+<h2 id="implementation-challenges"><a class="header" href="#implementation-challenges">Implementation Challenges</a></h2>
+<h3 id="1-prefix-hashing"><a class="header" href="#1-prefix-hashing">1. Prefix Hashing</a></h3>
+<p>For educational purposes, the implementation uses simple string hashing. In production:</p>
+<ul>
+<li>Use token ID sequences for more accurate prefix matching</li>
+<li>Implement more sophisticated similarity measures</li>
+<li>Consider semantic similarity for better grouping</li>
+</ul>
+<h3 id="2-memory-allocation"><a class="header" href="#2-memory-allocation">2. Memory Allocation</a></h3>
+<p>The current implementation shows integration points for memory management. A full implementation would:</p>
+<ul>
+<li>Calculate precise memory requirements</li>
+<li>Implement cache eviction policies</li>
+<li>Handle memory fragmentation</li>
+</ul>
+<h3 id="3-computation-sharing"><a class="header" href="#3-computation-sharing">3. Computation Sharing</a></h3>
+<p>The radix tree integration points exist but require full implementation of:</p>
+<ul>
+<li>Efficient tree traversal</li>
+<li>Shared computation tracking</li>
+<li>Result distribution to multiple requests</li>
+</ul>
+<h2 id="scheduling-algorithm-details"><a class="header" href="#scheduling-algorithm-details">Scheduling Algorithm Details</a></h2>
+<h3 id="step-by-step-process"><a class="header" href="#step-by-step-process">Step-by-Step Process</a></h3>
+<ol>
+<li><strong>Decode Prioritization</strong>: Schedule as many decode requests as possible</li>
+<li><strong>Capacity Calculation</strong>: Determine remaining batch capacity</li>
+<li><strong>Prefill Scheduling</strong>: Fill remaining capacity with prefill requests</li>
+<li><strong>Memory Verification</strong>: Confirm sufficient KV-cache availability</li>
+<li><strong>Batch Execution</strong>: Process scheduled requests</li>
+</ol>
+<h3 id="optimization-strategies"><a class="header" href="#optimization-strategies">Optimization Strategies</a></h3>
+<p>The scheduler implements several optimization strategies:</p>
+<ol>
+<li><strong>Temporal Multiplexing</strong>: Interleave prefill and decode for efficiency</li>
+<li><strong>Spatial Multiplexing</strong>: Group similar requests for shared computation</li>
+<li><strong>Memory Multiplexing</strong>: Optimize KV-cache usage across requests</li>
+</ol>
+<h2 id="future-extensions"><a class="header" href="#future-extensions">Future Extensions</a></h2>
+<p>The scheduler design supports:</p>
+<ul>
+<li>Advanced prefix matching algorithms</li>
+<li>Dynamic batch size adjustment</li>
+<li>Request preemption and rescheduling</li>
+<li>Multi-GPU coordination</li>
+<li>Custom scheduling policies</li>
+</ul>
 
                     </main>
 

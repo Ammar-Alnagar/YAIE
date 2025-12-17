@@ -54,10 +54,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b58c91dd.js";
+            window.path_to_searchindex_js = "../searchindex-d63bbf73.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-676105c4.js"></script>
+        <script src="../toc-44f1b166.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,34 +196,336 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="api-endpoints-serverapipy"><a class="header" href="#api-endpoints-serverapipy">API Endpoints (<code>server/api.py</code>)</a></h1>
-<h2 id="openai-compatibility"><a class="header" href="#openai-compatibility">OpenAI Compatibility</a></h2>
-<p>Mini-YAIE strives to be drop-in compatible with OpenAI’s API format.</p>
-<h3 id="post-v1chatcompletions"><a class="header" href="#post-v1chatcompletions">POST <code>/v1/chat/completions</code></a></h3>
-<p><strong>Request Body</strong>:</p>
-<pre><code class="language-json">{
-  "model": "gpt2",
-  "messages": [{ "role": "user", "content": "Hello!" }],
-  "temperature": 0.7,
-  "max_tokens": 100
-}
+                        <h1 id="api--serving-openai-compatible-server"><a class="header" href="#api--serving-openai-compatible-server">API &amp; Serving: OpenAI-Compatible Server</a></h1>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The API server in Mini-YAIE implements an OpenAI-compatible interface, allowing the engine to be used with existing applications and tools designed for OpenAI’s API. The server uses FastAPI to provide RESTful endpoints with proper request/response handling, streaming support, and health monitoring.</p>
+<h2 id="api-design-philosophy"><a class="header" href="#api-design-philosophy">API Design Philosophy</a></h2>
+<p>The server follows OpenAI’s API specification to ensure compatibility with existing tools and applications while leveraging the advanced features of the SGLang-style inference engine. This approach allows users to:</p>
+<ul>
+<li>Use existing OpenAI clients without modification</li>
+<li>Take advantage of Mini-YAIE’s performance optimizations</li>
+<li>Integrate with tools built for OpenAI’s API format</li>
+<li>Maintain familiar request/response patterns</li>
+</ul>
+<h2 id="core-architecture"><a class="header" href="#core-architecture">Core Architecture</a></h2>
+<h3 id="fastapi-application"><a class="header" href="#fastapi-application">FastAPI Application</a></h3>
+<p>The server is built using FastAPI for high-performance web serving:</p>
+<pre><code class="language-python">def create_app(model_name: str) -&gt; FastAPI:
+    app = FastAPI(title="YAIE API", version="0.1.0")
+    engine = InferenceEngine(model_name)
+    return app
 </code></pre>
-<p><strong>Response</strong>:</p>
-<pre><code class="language-json">{
-  "id": "chat-123",
-  "object": "chat.completion",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "Hi there!"
-      },
-      "finish_reason": "stop"
+<h3 id="main-components"><a class="header" href="#main-components">Main Components</a></h3>
+<ol>
+<li><strong>Inference Engine Integration</strong>: Connects API endpoints to the core inference engine</li>
+<li><strong>Request Validation</strong>: Pydantic models for request/response validation</li>
+<li><strong>Streaming Support</strong>: Server-sent events for real-time token streaming</li>
+<li><strong>Error Handling</strong>: Proper HTTP error codes and message formatting</li>
+<li><strong>Health Monitoring</strong>: Endpoints for system status and availability</li>
+</ol>
+<h2 id="api-endpoints"><a class="header" href="#api-endpoints">API Endpoints</a></h2>
+<h3 id="1-chat-completions-endpoint"><a class="header" href="#1-chat-completions-endpoint">1. Chat Completions Endpoint</a></h3>
+<p>The main endpoint follows OpenAI’s <code>/v1/chat/completions</code> specification:</p>
+<pre><code class="language-python">@app.post("/v1/chat/completions")
+async def chat_completions(request: ChatCompletionRequest):
+    # Implementation handles both streaming and non-streaming responses
+</code></pre>
+<h4 id="request-schema"><a class="header" href="#request-schema">Request Schema</a></h4>
+<pre><code class="language-python">class ChatCompletionRequest(BaseModel):
+    model: str
+    messages: List[ChatMessage]
+    temperature: Optional[float] = 1.0
+    top_p: Optional[float] = 1.0
+    max_tokens: Optional[int] = None
+    stream: Optional[bool] = False
+</code></pre>
+<h4 id="response-schema"><a class="header" href="#response-schema">Response Schema</a></h4>
+<pre><code class="language-python">class ChatCompletionResponse(BaseModel):
+    id: str
+    object: str = "chat.completion"
+    created: int
+    model: str
+    choices: List[Choice]
+    usage: Dict[str, int]
+</code></pre>
+<h4 id="supported-parameters"><a class="header" href="#supported-parameters">Supported Parameters</a></h4>
+<ul>
+<li><strong>model</strong>: Model identifier (passed during server startup)</li>
+<li><strong>messages</strong>: List of message objects with role and content</li>
+<li><strong>temperature</strong>: Sampling temperature (0.0-2.0 recommended)</li>
+<li><strong>top_p</strong>: Nucleus sampling threshold (0.0-1.0)</li>
+<li><strong>max_tokens</strong>: Maximum tokens to generate</li>
+<li><strong>stream</strong>: Whether to stream responses (true/false)</li>
+</ul>
+<h3 id="2-model-listing-endpoint"><a class="header" href="#2-model-listing-endpoint">2. Model Listing Endpoint</a></h3>
+<p>Lists the available model:</p>
+<pre><code class="language-python">@app.get("/v1/models")
+async def list_models():
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": model_name,
+                "object": "model",
+                "owned_by": "user",
+                "created": int(time.time()),
+            }
+        ],
     }
-  ]
+</code></pre>
+<h3 id="3-health-check-endpoint"><a class="header" href="#3-health-check-endpoint">3. Health Check Endpoint</a></h3>
+<p>Simple health monitoring:</p>
+<pre><code class="language-python">@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "model": model_name}
+</code></pre>
+<h2 id="streaming-implementation"><a class="header" href="#streaming-implementation">Streaming Implementation</a></h2>
+<h3 id="streaming-vs-non-streaming"><a class="header" href="#streaming-vs-non-streaming">Streaming vs Non-Streaming</a></h3>
+<p>The server supports both response formats using the same endpoint:</p>
+<pre><code class="language-python">if request.stream:
+    # Return streaming response
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+else:
+    # Return non-streaming response
+    response = engine.chat_completion(messages_dicts, **kwargs)
+    return response
+</code></pre>
+<h3 id="streaming-response-format"><a class="header" href="#streaming-response-format">Streaming Response Format</a></h3>
+<p>The streaming implementation generates Server-Sent Events (SSE):</p>
+<pre><code class="language-python">def generate_stream():
+    for chunk in engine.chat_completion_stream(messages_dicts, **kwargs):
+        yield f"data: {json.dumps(chunk)}\n\n"
+    yield "data: [DONE]\n\n"
+</code></pre>
+<p>Each chunk follows OpenAI’s streaming format:</p>
+<pre><code class="language-json">{
+  "id": "chatcmpl-...",
+  "object": "chat.completion.chunk",
+  "created": 1234567890,
+  "model": "model-name",
+  "choices": [{
+    "index": 0,
+    "delta": {"content": "token"},
+    "finish_reason": null
+  }]
 }
 </code></pre>
+<h2 id="integration-with-inference-engine"><a class="header" href="#integration-with-inference-engine">Integration with Inference Engine</a></h2>
+<h3 id="request-processing-flow"><a class="header" href="#request-processing-flow">Request Processing Flow</a></h3>
+<ol>
+<li><strong>API Request</strong>: Received through FastAPI endpoints</li>
+<li><strong>Validation</strong>: Pydantic models validate request format</li>
+<li><strong>Parameter Extraction</strong>: Convert API parameters to engine format</li>
+<li><strong>Engine Processing</strong>: Call appropriate engine methods</li>
+<li><strong>Response Formatting</strong>: Convert engine output to API format</li>
+<li><strong>API Response</strong>: Return properly formatted responses</li>
+</ol>
+<h3 id="parameter-mapping"><a class="header" href="#parameter-mapping">Parameter Mapping</a></h3>
+<p>API parameters are mapped to engine capabilities:</p>
+<pre><code class="language-python">kwargs = {}
+if request.max_tokens is not None:
+    kwargs["max_tokens"] = request.max_tokens
+if request.temperature is not None:
+    kwargs["temperature"] = request.temperature
+if request.top_p is not None:
+    kwargs["top_p"] = request.top_p
+</code></pre>
+<h3 id="message-formatting"><a class="header" href="#message-formatting">Message Formatting</a></h3>
+<p>The server handles OpenAI-style messages by converting them to a format the engine understands:</p>
+<pre><code class="language-python">messages_dicts = [
+    {"role": msg.role, "content": msg.content}
+    for msg in request.messages
+]
+
+# Apply chat template if available
+if hasattr(self.tokenizer, 'apply_chat_template'):
+    formatted_prompt = self.tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True
+    )
+else:
+    # Fallback formatting
+    formatted_prompt = ""
+    for message in messages:
+        formatted_prompt += f"{message['role'].capitalize()}: {message['content']}\n"
+    formatted_prompt += "\nAssistant:"
+</code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="http-error-codes"><a class="header" href="#http-error-codes">HTTP Error Codes</a></h3>
+<p>The server properly handles various error conditions:</p>
+<ul>
+<li><strong>400 Bad Request</strong>: Invalid request parameters</li>
+<li><strong>429 Too Many Requests</strong>: Rate limiting (not implemented in basic version)</li>
+<li><strong>500 Internal Server Error</strong>: Server-side errors during processing</li>
+</ul>
+<h3 id="error-response-format"><a class="header" href="#error-response-format">Error Response Format</a></h3>
+<p>Standard OpenAI-compatible error format:</p>
+<pre><code class="language-python">{
+  "error": {
+    "message": "Error description",
+    "type": "server_error",
+    "param": null,
+    "code": null
+  }
+}
+</code></pre>
+<h3 id="exception-handling"><a class="header" href="#exception-handling">Exception Handling</a></h3>
+<p>The server wraps all processing in try-catch blocks:</p>
+<pre><code class="language-python">try:
+    # Process request
+    response = engine.chat_completion(messages_dicts, **kwargs)
+    return response
+except Exception as e:
+    traceback.print_exc()
+    raise HTTPException(status_code=500, detail=str(e))
+</code></pre>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<h3 id="request-batching"><a class="header" href="#request-batching">Request Batching</a></h3>
+<p>The API integrates with the engine’s batching system:</p>
+<ul>
+<li>Multiple API requests can be batched together in the engine</li>
+<li>Continuous batching maintains high throughput</li>
+<li>Batch size limited by engine configuration</li>
+</ul>
+<h3 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h3>
+<p>The server shares memory with the inference engine:</p>
+<ul>
+<li>KV-cache is shared across API requests</li>
+<li>Efficient memory reuse through paged cache system</li>
+<li>Memory limits enforced by engine configuration</li>
+</ul>
+<h3 id="concurrency"><a class="header" href="#concurrency">Concurrency</a></h3>
+<p>FastAPI provides automatic concurrency handling:</p>
+<ul>
+<li>Async request processing</li>
+<li>Connection pooling</li>
+<li>Efficient handling of multiple simultaneous requests</li>
+</ul>
+<h2 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h2>
+<h3 id="input-validation"><a class="header" href="#input-validation">Input Validation</a></h3>
+<ul>
+<li>Pydantic models validate all request parameters</li>
+<li>Type checking prevents injection attacks</li>
+<li>Length limits prevent excessive resource consumption</li>
+</ul>
+<h3 id="rate-limiting"><a class="header" href="#rate-limiting">Rate Limiting</a></h3>
+<p>While not implemented in the basic version, can be added:</p>
+<ul>
+<li>Per-IP rate limiting</li>
+<li>Request quota management</li>
+<li>Usage monitoring</li>
+</ul>
+<h2 id="deployment-configuration"><a class="header" href="#deployment-configuration">Deployment Configuration</a></h2>
+<h3 id="server-startup"><a class="header" href="#server-startup">Server Startup</a></h3>
+<p>The server can be started with a specific model:</p>
+<pre><code class="language-bash">uvicorn server.api:app --host 0.0.0.0 --port 8000
+</code></pre>
+<h3 id="environment-configuration"><a class="header" href="#environment-configuration">Environment Configuration</a></h3>
+<p>The server supports environment-based configuration:</p>
+<ul>
+<li>Model name via environment variables</li>
+<li>Port and host configuration</li>
+<li>Resource limits</li>
+</ul>
+<h2 id="sglang-style-features-integration"><a class="header" href="#sglang-style-features-integration">SGLang-Style Features Integration</a></h2>
+<h3 id="continuous-batching"><a class="header" href="#continuous-batching">Continuous Batching</a></h3>
+<p>The API benefits from the engine’s continuous batching:</p>
+<ul>
+<li>Requests are automatically batched</li>
+<li>High throughput maintained</li>
+<li>Low latency for individual requests</li>
+</ul>
+<h3 id="prefix-sharing"><a class="header" href="#prefix-sharing">Prefix Sharing</a></h3>
+<p>API requests with similar prefixes benefit from:</p>
+<ul>
+<li>Shared computation in radial attention</li>
+<li>Reduced memory usage</li>
+<li>Improved efficiency</li>
+</ul>
+<h3 id="multi-step-processing"><a class="header" href="#multi-step-processing">Multi-Step Processing</a></h3>
+<p>The API leverages the engine’s multi-step capabilities:</p>
+<ul>
+<li>Efficient prefill and decode phases</li>
+<li>Optimized request scheduling</li>
+<li>Memory-aware processing</li>
+</ul>
+<h2 id="usage-examples"><a class="header" href="#usage-examples">Usage Examples</a></h2>
+<h3 id="basic-chat-request"><a class="header" href="#basic-chat-request">Basic Chat Request</a></h3>
+<pre><code class="language-bash">curl -X POST "http://localhost:8000/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "model-name",
+    "messages": [
+      {"role": "user", "content": "Hello, how are you?"}
+    ],
+    "temperature": 0.7
+  }'
+</code></pre>
+<h3 id="streaming-request"><a class="header" href="#streaming-request">Streaming Request</a></h3>
+<pre><code class="language-bash">curl -X POST "http://localhost:8000/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "model-name",
+    "messages": [
+      {"role": "user", "content": "Write a short story"}
+    ],
+    "stream": true
+  }'
+</code></pre>
+<h3 id="programmatic-usage"><a class="header" href="#programmatic-usage">Programmatic Usage</a></h3>
+<pre><code class="language-python">import openai
+
+# Configure client to use local server
+client = openai.OpenAI(
+    base_url="http://localhost:8000/v1",
+    api_key="dummy"  # Required but ignored
+)
+
+# Use standard OpenAI SDK
+response = client.chat.completions.create(
+    model="model-name",
+    messages=[{"role": "user", "content": "Hello"}],
+    temperature=0.7
+)
+</code></pre>
+<h2 id="monitoring-and-logging"><a class="header" href="#monitoring-and-logging">Monitoring and Logging</a></h2>
+<h3 id="health-endpoints"><a class="header" href="#health-endpoints">Health Endpoints</a></h3>
+<p>The health endpoint can be used for monitoring:</p>
+<pre><code class="language-bash">curl http://localhost:8000/health
+</code></pre>
+<h3 id="performance-metrics"><a class="header" href="#performance-metrics">Performance Metrics</a></h3>
+<p>The server can be extended with:</p>
+<ul>
+<li>Response time tracking</li>
+<li>Request volume monitoring</li>
+<li>Error rate monitoring</li>
+<li>Resource utilization metrics</li>
+</ul>
+<h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
+<h3 id="model-loading"><a class="header" href="#model-loading">Model Loading</a></h3>
+<p>The server handles model loading automatically:</p>
+<ul>
+<li>Lazy loading when first accessed</li>
+<li>Caching for subsequent requests</li>
+<li>HuggingFace model integration</li>
+</ul>
+<h3 id="response-caching"><a class="header" href="#response-caching">Response Caching</a></h3>
+<p>The system supports response caching for:</p>
+<ul>
+<li>Repeated identical requests</li>
+<li>Common prompt patterns</li>
+<li>Improved response times for cached content</li>
+</ul>
+<h3 id="logging-and-debugging"><a class="header" href="#logging-and-debugging">Logging and Debugging</a></h3>
+<p>Comprehensive logging can be added:</p>
+<ul>
+<li>Request/response logging</li>
+<li>Performance metrics</li>
+<li>Error tracing</li>
+<li>Usage analytics</li>
+</ul>
+<p>This OpenAI-compatible API server enables Mini-YAIE to be integrated into existing ecosystems while providing the performance benefits of SGLang-style inference optimization.</p>
 
                     </main>
 

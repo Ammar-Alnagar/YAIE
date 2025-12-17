@@ -55,10 +55,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b58c91dd.js";
+            window.path_to_searchindex_js = "searchindex-d63bbf73.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-676105c4.js"></script>
+        <script src="toc-44f1b166.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -273,6 +273,150 @@ cargo install mdbook
 </li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="model-loading"><a class="header" href="#model-loading">Model Loading</a></h1>
+<p>YAIE supports loading models from HuggingFace Hub with automatic caching and local model support.</p>
+<h2 id="modelloader-class"><a class="header" href="#modelloader-class">ModelLoader Class</a></h2>
+<p>The <code>ModelLoader</code> class in <code>src/models/loader.py</code> handles all model and tokenizer loading operations.</p>
+<h3 id="initialization"><a class="header" href="#initialization">Initialization</a></h3>
+<pre><code class="language-python">from src.models.loader import ModelLoader
+
+# Load from HuggingFace Hub
+loader = ModelLoader("microsoft/DialoGPT-medium")
+
+# Load from local path
+loader = ModelLoader("/path/to/local/model")
+</code></pre>
+<h3 id="loading-models"><a class="header" href="#loading-models">Loading Models</a></h3>
+<pre><code class="language-python"># Load the model
+model = loader.load_model()
+
+# Load the tokenizer
+tokenizer = loader.load_tokenizer()
+</code></pre>
+<h2 id="supported-model-sources"><a class="header" href="#supported-model-sources">Supported Model Sources</a></h2>
+<h3 id="huggingface-hub-models"><a class="header" href="#huggingface-hub-models">HuggingFace Hub Models</a></h3>
+<p>YAIE can load any compatible model from HuggingFace Hub:</p>
+<pre><code class="language-python"># Popular conversational models
+loader = ModelLoader("microsoft/DialoGPT-medium")
+loader = ModelLoader("microsoft/DialoGPT-large")
+
+# Code generation models
+loader = ModelLoader("Salesforce/codegen-350M-mono")
+
+# General purpose models
+loader = ModelLoader("gpt2")
+loader = ModelLoader("gpt2-medium")
+</code></pre>
+<h3 id="local-models"><a class="header" href="#local-models">Local Models</a></h3>
+<p>You can also load models from local directories:</p>
+<pre><code class="language-python"># Load from local path
+loader = ModelLoader("./models/my-custom-model")
+</code></pre>
+<h2 id="caching-behavior"><a class="header" href="#caching-behavior">Caching Behavior</a></h2>
+<h3 id="automatic-caching"><a class="header" href="#automatic-caching">Automatic Caching</a></h3>
+<p>Models are automatically cached in the standard HuggingFace cache directory:</p>
+<ul>
+<li><strong>Linux/macOS</strong>: <code>~/.cache/huggingface/</code></li>
+<li><strong>Windows</strong>: <code>C:\Users\&lt;username&gt;\.cache\huggingface\</code></li>
+</ul>
+<h3 id="cache-structure"><a class="header" href="#cache-structure">Cache Structure</a></h3>
+<pre><code>~/.cache/huggingface/
+├── hub/
+│   └── models--microsoft--DialoGPT-medium/
+│       ├── blobs/
+│       ├── refs/
+│       └── snapshots/
+│           └── abc123.../
+│               ├── config.json
+│               ├── pytorch_model.bin
+│               └── tokenizer.json
+</code></pre>
+<h3 id="cache-management"><a class="header" href="#cache-management">Cache Management</a></h3>
+<p>The loader automatically:</p>
+<ol>
+<li>Checks for existing models in cache</li>
+<li>Downloads missing models from HuggingFace Hub</li>
+<li>Uses cached models for subsequent loads</li>
+</ol>
+<h2 id="model-configuration"><a class="header" href="#model-configuration">Model Configuration</a></h2>
+<h3 id="data-types"><a class="header" href="#data-types">Data Types</a></h3>
+<p>Models are loaded with optimized data types:</p>
+<pre><code class="language-python"># Models are loaded with float16 by default for efficiency
+model = AutoModelForCausalLM.from_pretrained(
+    model_path,
+    torch_dtype=torch.float16,  # Half precision
+    device_map="auto"          # Automatic device placement
+)
+</code></pre>
+<h3 id="device-placement"><a class="header" href="#device-placement">Device Placement</a></h3>
+<ul>
+<li><strong>Single GPU</strong>: Model is loaded directly to GPU</li>
+<li><strong>Multi-GPU</strong>: Automatically distributed across available GPUs</li>
+<li><strong>CPU</strong>: Falls back to CPU if no GPU available</li>
+</ul>
+<h2 id="tokenizer-configuration"><a class="header" href="#tokenizer-configuration">Tokenizer Configuration</a></h2>
+<h3 id="automatic-pad-token"><a class="header" href="#automatic-pad-token">Automatic Pad Token</a></h3>
+<p>The loader ensures tokenizers have a pad token:</p>
+<pre><code class="language-python">if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
+</code></pre>
+<p>This is important for batch processing where sequences need to be padded to the same length.</p>
+<h2 id="memory-optimization"><a class="header" href="#memory-optimization">Memory Optimization</a></h2>
+<h3 id="lazy-loading"><a class="header" href="#lazy-loading">Lazy Loading</a></h3>
+<p>Models are loaded on-demand, not at import time:</p>
+<pre><code class="language-python"># Model is not loaded here
+loader = ModelLoader("gpt2")
+
+# Model is loaded here when requested
+model = loader.load_model()
+</code></pre>
+<h3 id="memory-mapping"><a class="header" href="#memory-mapping">Memory Mapping</a></h3>
+<p>Large models use memory mapping to reduce RAM usage during loading.</p>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="network-issues"><a class="header" href="#network-issues">Network Issues</a></h3>
+<p>If downloading fails, the loader will retry and provide clear error messages.</p>
+<h3 id="incompatible-models"><a class="header" href="#incompatible-models">Incompatible Models</a></h3>
+<p>Models must be compatible with <code>AutoModelForCausalLM</code>. Incompatible models will raise clear errors.</p>
+<h3 id="disk-space"><a class="header" href="#disk-space">Disk Space</a></h3>
+<p>Large models require significant disk space. The loader shows download progress and estimated sizes.</p>
+<h2 id="performance-tips"><a class="header" href="#performance-tips">Performance Tips</a></h2>
+<h3 id="pre-download-models"><a class="header" href="#pre-download-models">Pre-download Models</a></h3>
+<p>For production deployments, pre-download models:</p>
+<pre><code class="language-bash"># This will cache the model
+python -c "from src.models.loader import ModelLoader; loader = ModelLoader('microsoft/DialoGPT-medium'); loader.load_model()"
+</code></pre>
+<h3 id="cache-location"><a class="header" href="#cache-location">Cache Location</a></h3>
+<p>You can customize the cache location by setting the <code>HF_HOME</code> environment variable:</p>
+<pre><code class="language-bash">export HF_HOME=/path/to/custom/cache
+</code></pre>
+<h3 id="model-selection"><a class="header" href="#model-selection">Model Selection</a></h3>
+<p>Choose appropriate model sizes for your hardware:</p>
+<ul>
+<li><strong>Small models</strong> (&lt; 1GB): <code>gpt2</code>, <code>DialoGPT-small</code></li>
+<li><strong>Medium models</strong> (1-5GB): <code>gpt2-medium</code>, <code>DialoGPT-medium</code></li>
+<li><strong>Large models</strong> (&gt; 5GB): <code>gpt2-large</code>, <code>DialoGPT-large</code></li>
+</ul>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
+<p><strong>“Model not found” errors:</strong></p>
+<ul>
+<li>Check model name spelling</li>
+<li>Verify model exists on HuggingFace Hub</li>
+<li>Ensure internet connection for downloads</li>
+</ul>
+<p><strong>Out of memory errors:</strong></p>
+<ul>
+<li>Try smaller models</li>
+<li>Reduce batch sizes in configuration</li>
+<li>Use CPU-only mode if GPU memory is insufficient</li>
+</ul>
+<p><strong>Tokenizer issues:</strong></p>
+<ul>
+<li>Some models may require special token handling</li>
+<li>Check the model’s documentation on HuggingFace Hub
+<parameter name="filePath">docs/src/intro/model_loading.md</parameter></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="llm-inference-the-basics"><a class="header" href="#llm-inference-the-basics">LLM Inference: The Basics</a></h1>
 <p>Large Language Model (LLM) inference is the process of generating text from a trained model. It consists of two distinct phases.</p>
 <h2 id="1-prefill-phase-the-prompt"><a class="header" href="#1-prefill-phase-the-prompt">1. Prefill Phase (The “Prompt”)</a></h2>
@@ -441,127 +585,1100 @@ cargo install mdbook
 <h2 id="the-kernel"><a class="header" href="#the-kernel">The Kernel</a></h2>
 <p>The Paged Attention kernel allows the Attention mechanism to read keys and values from these non-contiguous blocks on the fly, enabling near-zero memory waste.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="system-overview"><a class="header" href="#system-overview">System Overview</a></h1>
-<p>Mini-YAIE follows a modular architecture similar to vLLM.</p>
-<h2 id="high-level-components"><a class="header" href="#high-level-components">High-Level Components</a></h2>
-<pre><code class="language-mermaid">graph TD
-    User[User / API Client] --&gt; API[FastAPI Server (server/api.py)]
-    API --&gt; Engine[Inference Engine (engine.py)]
-
-    subgraph Core Logic
-        Engine --&gt; Scheduler[SGLang Scheduler (core/sglang_scheduler.py)]
-        Engine --&gt; MM[Memory Manager (kernels/kv_cache.py)]
-        Engine --&gt; Model[LLM Model (HuggingFace)]
-    end
-
-    subgraph Kernels
-        Scheduler --&gt; RadixTree[Radix Tree (kernels/radix_tree.py)]
-        Model --&gt; RadixAttn[Radix Attention (kernels/radix_attention.py)]
-        Model --&gt; PagedAttn[Paged Attention (kernels/cuda/paged_attention.cu)]
-    end
+<h1 id="system-architecture-overview"><a class="header" href="#system-architecture-overview">System Architecture Overview</a></h1>
+<h2 id="introduction"><a class="header" href="#introduction">Introduction</a></h2>
+<p>Mini-YAIE (Yet Another Inference Engine) is an educational implementation of modern LLM inference techniques, specifically designed to demonstrate concepts from state-of-the-art systems like SGLang, vLLM, and TensorRT-LLM. The architecture focuses on three core optimizations:</p>
+<ol>
+<li><strong>Continuous Batching</strong>: Dynamically batching incoming requests to maximize GPU utilization</li>
+<li><strong>Radix Attention</strong>: Efficient attention mechanism with prefix sharing for similar requests</li>
+<li><strong>Paged KV-Cache</strong>: Memory-efficient key-value cache management</li>
+</ol>
+<h2 id="high-level-architecture"><a class="header" href="#high-level-architecture">High-Level Architecture</a></h2>
+<pre><code>┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   API Layer     │    │  Engine Core    │    │  Model/Kernels  │
+│  (FastAPI)      │◄──►│  (Scheduler,   │◄──►│  (PyTorch/     │
+│                 │    │  Attention)    │    │  CUDA)         │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         ▲                       ▲                       ▲
+         │                       │                       │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   CLI Layer     │    │  Model Loading  │    │  Memory Mgmt    │
+│  (yaie serve/   │    │  (HuggingFace  │    │  (Paged Cache)  │
+│   yaie chat)    │    │  Integration)   │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 </code></pre>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<h3 id="1-main-inference-engine-enginepy"><a class="header" href="#1-main-inference-engine-enginepy">1. Main Inference Engine (<code>engine.py</code>)</a></h3>
+<p>The main inference engine orchestrates all components and provides the high-level API for inference. It implements SGLang-style continuous batching with radix attention and prefix sharing.</p>
+<p><strong>Key Responsibilities:</strong></p>
+<ul>
+<li>Request orchestration and management</li>
+<li>Integration between scheduler, attention mechanisms, and memory management</li>
+<li>API layer communication</li>
+<li>Model loading and tokenizer management</li>
+</ul>
+<h3 id="2-sglang-scheduler-coresglang_schedulerpy"><a class="header" href="#2-sglang-scheduler-coresglang_schedulerpy">2. SGLang Scheduler (<code>core/sglang_scheduler.py</code>)</a></h3>
+<p>The SGLang-style scheduler implements advanced request scheduling with:</p>
+<ul>
+<li><strong>Prefix-based request grouping</strong>: Groups requests with common prefixes for computation sharing</li>
+<li><strong>Separate prefill and decode scheduling</strong>: Optimizes for the different computational patterns</li>
+<li><strong>Memory-aware batch sizing</strong>: Considers available KV-cache memory when scheduling</li>
+<li><strong>Continuous batching optimization</strong>: Maintains high GPU utilization</li>
+</ul>
+<h3 id="3-radix-attention-system-kernelsradix_attentionpy"><a class="header" href="#3-radix-attention-system-kernelsradix_attentionpy">3. Radix Attention System (<code>kernels/radix_attention.py</code>)</a></h3>
+<p>Implements the radial attention mechanism with:</p>
+<ul>
+<li><strong>Prefix sharing</strong>: Reduces redundant computation for requests with common prefixes</li>
+<li><strong>Paged KV-cache integration</strong>: Efficient memory management for variable-length requests</li>
+<li><strong>RoPE (Rotary Position Embeddings)</strong>: Supports position-aware attention</li>
+</ul>
+<h3 id="4-paged-kv-cache-management-kernelskv_cachepy"><a class="header" href="#4-paged-kv-cache-management-kernelskv_cachepy">4. Paged KV-Cache Management (<code>kernels/kv_cache.py</code>)</a></h3>
+<p>Efficient memory management using page-based allocation:</p>
+<ul>
+<li><strong>Fixed-size blocks</strong>: Reduces memory fragmentation</li>
+<li><strong>Request-to-block mapping</strong>: Tracks which blocks belong to which requests</li>
+<li><strong>Dynamic allocation/deallocation</strong>: Manages memory based on request lifecycle</li>
+</ul>
+<h3 id="5-radix-tree-system-kernelsradix_treepy"><a class="header" href="#5-radix-tree-system-kernelsradix_treepy">5. Radix Tree System (<code>kernels/radix_tree.py</code>)</a></h3>
+<p>Enables efficient prefix matching and computation sharing:</p>
+<ul>
+<li><strong>Trie-based structure</strong>: Organizes token sequences hierarchically</li>
+<li><strong>Request grouping</strong>: Identifies requests with shared prefixes</li>
+<li><strong>Computation optimization</strong>: Provides information for scheduler optimization</li>
+</ul>
+<h3 id="6-sampling-kernel-kernelssamplingpy"><a class="header" href="#6-sampling-kernel-kernelssamplingpy">6. Sampling Kernel (<code>kernels/sampling.py</code>)</a></h3>
+<p>Implements core sampling algorithms:</p>
+<ul>
+<li><strong>Temperature scaling</strong>: Controls randomness in generation</li>
+<li><strong>Top-K sampling</strong>: Limits selection to top K most probable tokens</li>
+<li><strong>Top-P (Nucleus) sampling</strong>: Limits selection to tokens that sum to probability P</li>
+</ul>
+<h3 id="7-api-server-serverapipy"><a class="header" href="#7-api-server-serverapipy">7. API Server (<code>server/api.py</code>)</a></h3>
+<p>Provides OpenAI-compatible API endpoints:</p>
+<ul>
+<li><strong>RESTful design</strong>: Follows OpenAI’s API specification</li>
+<li><strong>Streaming support</strong>: Real-time token streaming</li>
+<li><strong>Health monitoring</strong>: Server status endpoints</li>
+</ul>
 <h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
+<p>The system processes requests in the following sequence:</p>
 <ol>
-<li><strong>Request</strong>: User sends a prompt to the API.</li>
-<li><strong>Scheduling</strong>: Scheduler analyzes the prompt, checks the Radix Tree for cached prefixes, and assigns a Request ID.</li>
-<li><strong>Batching</strong>: <code>schedule_step</code> groups requests into Prefill (new) and Decode (running) batches.</li>
-<li><strong>Execution</strong>: The Engine runs the model.
+<li><strong>Request Arrival</strong>: Client sends a request through the API layer</li>
+<li><strong>Request Scheduling</strong>: SGLang scheduler groups requests with common prefixes</li>
+<li><strong>Prefill Phase</strong>: Process full prompt sequences using radial attention</li>
+<li><strong>Decode Phase</strong>: Generate tokens one-by-one with shared computation</li>
+<li><strong>KV-Cache Management</strong>: Efficient memory allocation and sharing</li>
+<li><strong>Response Generation</strong>: Return results via API layer</li>
+</ol>
+<h2 id="key-design-principles"><a class="header" href="#key-design-principles">Key Design Principles</a></h2>
+<h3 id="modularity"><a class="header" href="#modularity">Modularity</a></h3>
+<p>Each component is designed to be independent, allowing for focused learning and experimentation.</p>
+<h3 id="educational-focus"><a class="header" href="#educational-focus">Educational Focus</a></h3>
+<p>Clean, well-documented code with comprehensive explanations of key concepts.</p>
+<h3 id="sglang-style-optimization"><a class="header" href="#sglang-style-optimization">SGLang-Style Optimization</a></h3>
+<p>Focus on prefix sharing and radix trees to maximize computational efficiency.</p>
+<h3 id="memory-efficiency"><a class="header" href="#memory-efficiency">Memory Efficiency</a></h3>
+<p>Paged cache management to reduce memory fragmentation and maximize utilization.</p>
+<h2 id="architecture-benefits"><a class="header" href="#architecture-benefits">Architecture Benefits</a></h2>
+<ol>
+<li><strong>High Throughput</strong>: Continuous batching and prefix sharing maximize GPU utilization</li>
+<li><strong>Memory Efficiency</strong>: Paged KV-cache reduces fragmentation and enables larger batch sizes</li>
+<li><strong>Scalability</strong>: Modular design allows for optimization of individual components</li>
+<li><strong>Educational Value</strong>: Clean implementation of state-of-the-art techniques</li>
+</ol>
+<h2 id="integration-points"><a class="header" href="#integration-points">Integration Points</a></h2>
+<p>The system integrates components through well-defined interfaces:</p>
 <ul>
-<li><strong>Prefill</strong>: Computes initial KV cache for new prompts.</li>
-<li><strong>Decode</strong>: Generates one token for running requests.</li>
+<li>Engine connects to scheduler for request management</li>
+<li>Scheduler connects to memory manager for KV-cache coordination</li>
+<li>Attention mechanisms access KV-cache through the memory manager</li>
+<li>Sampler provides token selection for generation</li>
+<li>API layer communicates with the engine for request processing</li>
 </ul>
-</li>
-<li><strong>Memory</strong>: The Memory Manager allocates/frees GPU blocks as needed.</li>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="configuration-management"><a class="header" href="#configuration-management">Configuration Management</a></h1>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Mini-YAIE uses a flexible configuration system that allows users to customize various aspects of the inference engine without modifying the code. The configuration system provides settings for memory management, scheduling, model loading, and performance optimization.</p>
+<h2 id="configuration-structure"><a class="header" href="#configuration-structure">Configuration Structure</a></h2>
+<p>The configuration system is built around the main <code>config.py</code> file in the src directory. The system supports:</p>
+<ul>
+<li>Environment variable overrides</li>
+<li>Default values for all parameters</li>
+<li>Type checking and validation</li>
+<li>Component-specific configuration sections</li>
+</ul>
+<h2 id="key-configuration-parameters"><a class="header" href="#key-configuration-parameters">Key Configuration Parameters</a></h2>
+<h3 id="engine-configuration"><a class="header" href="#engine-configuration">Engine Configuration</a></h3>
+<pre><code class="language-python"># Maximum batch size for processing requests
+max_batch_size: int = 8
+
+# Maximum batch size for prefill operations
+max_prefill_batch_size: int = 16
+
+# Maximum batch size for decode operations
+max_decode_batch_size: int = 256
+
+# Maximum sequence length allowed
+max_seq_len: int = 2048
+</code></pre>
+<h3 id="memory-management-configuration"><a class="header" href="#memory-management-configuration">Memory Management Configuration</a></h3>
+<pre><code class="language-python"># Number of memory blocks in the KV-cache pool
+num_blocks: int = 2000
+
+# Size of each memory block (in tokens)
+block_size: int = 16
+
+# Data type for KV-cache storage
+dtype: torch.dtype = torch.float16
+</code></pre>
+<h3 id="model-specific-configuration"><a class="header" href="#model-specific-configuration">Model-Specific Configuration</a></h3>
+<pre><code class="language-python"># Model name for HuggingFace loading
+model_name: str
+
+# Maximum tokens to generate per request
+default_max_tokens: int = 128
+
+# Default sampling temperature
+default_temperature: float = 1.0
+
+# Default top-p value
+default_top_p: float = 1.0
+</code></pre>
+<h2 id="configuration-loading"><a class="header" href="#configuration-loading">Configuration Loading</a></h2>
+<h3 id="default-configuration"><a class="header" href="#default-configuration">Default Configuration</a></h3>
+<p>When no explicit configuration is provided, the system uses sensible defaults that work well for most educational purposes:</p>
+<ul>
+<li>Conservative memory usage to work on most GPUs</li>
+<li>Balanced performance settings</li>
+<li>Safe batch sizes that avoid out-of-memory errors</li>
+</ul>
+<h3 id="custom-configuration"><a class="header" href="#custom-configuration">Custom Configuration</a></h3>
+<p>Users can customize configurations by:</p>
+<ol>
+<li><strong>Direct parameter passing</strong> to constructors</li>
+<li><strong>Environment variables</strong> for deployment scenarios</li>
+<li><strong>Configuration files</strong> (when implemented)</li>
+</ol>
+<h2 id="configuration-best-practices"><a class="header" href="#configuration-best-practices">Configuration Best Practices</a></h2>
+<h3 id="performance-tuning"><a class="header" href="#performance-tuning">Performance Tuning</a></h3>
+<p>For production use, consider these configuration adjustments:</p>
+<ul>
+<li><strong>Increase batch sizes</strong> based on available GPU memory</li>
+<li><strong>Adjust block size</strong> for optimal cache utilization</li>
+<li><strong>Tune memory pool size</strong> based on request patterns</li>
+</ul>
+<h3 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h3>
+<p>Configure memory settings based on your hardware:</p>
+<pre><code class="language-python"># For high-end GPUs (24GB+ VRAM)
+num_blocks = 4000
+max_batch_size = 32
+
+# For mid-range GPUs (8-16GB VRAM)
+num_blocks = 1000
+max_batch_size = 8
+
+# For entry-level GPUs (4-8GB VRAM)
+num_blocks = 500
+max_batch_size = 4
+</code></pre>
+<h2 id="integration-with-components"><a class="header" href="#integration-with-components">Integration with Components</a></h2>
+<h3 id="engine-integration"><a class="header" href="#engine-integration">Engine Integration</a></h3>
+<p>The main engine reads configuration parameters during initialization:</p>
+<pre><code class="language-python">def __init__(self, model_name: str, config: Optional[Config] = None):
+    self.config = config or self._get_default_config()
+    # Initialize components with config values
+    self.scheduler = SGLangScheduler(
+        max_batch_size=self.config.max_batch_size,
+        max_prefill_batch_size=self.config.max_prefill_batch_size,
+        max_decode_batch_size=self.config.max_decode_batch_size
+    )
+</code></pre>
+<h3 id="scheduler-configuration"><a class="header" href="#scheduler-configuration">Scheduler Configuration</a></h3>
+<p>The SGLang scheduler uses configuration for scheduling policies:</p>
+<ul>
+<li>Batch size limits</li>
+<li>Prefill/decode phase sizing</li>
+<li>Memory-aware scheduling decisions</li>
+</ul>
+<h3 id="memory-manager-configuration"><a class="header" href="#memory-manager-configuration">Memory Manager Configuration</a></h3>
+<p>The KV-cache manager uses configuration for:</p>
+<ul>
+<li>Total memory pool size</li>
+<li>Block allocation strategies</li>
+<li>Memory optimization policies</li>
+</ul>
+<h2 id="environment-specific-configuration"><a class="header" href="#environment-specific-configuration">Environment-Specific Configuration</a></h2>
+<h3 id="development-configuration"><a class="header" href="#development-configuration">Development Configuration</a></h3>
+<p>For development and learning:</p>
+<ul>
+<li>Conservative memory limits</li>
+<li>Detailed logging</li>
+<li>Debug information enabled</li>
+</ul>
+<h3 id="production-configuration"><a class="header" href="#production-configuration">Production Configuration</a></h3>
+<p>For production deployment:</p>
+<ul>
+<li>Optimized batch sizes</li>
+<li>Performance-focused settings</li>
+<li>Minimal logging overhead</li>
+</ul>
+<h2 id="configuration-validation"><a class="header" href="#configuration-validation">Configuration Validation</a></h2>
+<p>The system validates configuration parameters to prevent:</p>
+<ul>
+<li>Memory allocation failures</li>
+<li>Invalid parameter combinations</li>
+<li>Performance-degrading settings</li>
+</ul>
+<h2 id="future-extensions"><a class="header" href="#future-extensions">Future Extensions</a></h2>
+<p>The configuration system is designed to accommodate:</p>
+<ul>
+<li>Model-specific optimizations</li>
+<li>Hardware-aware tuning</li>
+<li>Runtime configuration updates</li>
+<li>Performance auto-tuning</li>
+</ul>
+<h2 id="configuration-examples"><a class="header" href="#configuration-examples">Configuration Examples</a></h2>
+<h3 id="basic-configuration"><a class="header" href="#basic-configuration">Basic Configuration</a></h3>
+<pre><code class="language-python"># Minimal configuration for learning
+config = {
+    "max_batch_size": 4,
+    "num_blocks": 1000,
+    "block_size": 16
+}
+</code></pre>
+<h3 id="performance-configuration"><a class="header" href="#performance-configuration">Performance Configuration</a></h3>
+<pre><code class="language-python"># Optimized for throughput
+config = {
+    "max_batch_size": 32,
+    "max_decode_batch_size": 512,
+    "num_blocks": 4000,
+    "block_size": 32
+}
+</code></pre>
+<h2 id="troubleshooting-configuration-issues"><a class="header" href="#troubleshooting-configuration-issues">Troubleshooting Configuration Issues</a></h2>
+<h3 id="memory-issues"><a class="header" href="#memory-issues">Memory Issues</a></h3>
+<p>If experiencing out-of-memory errors:</p>
+<ol>
+<li>Reduce <code>num_blocks</code> in KV-cache</li>
+<li>Lower batch sizes</li>
+<li>Check available GPU memory</li>
+</ol>
+<h3 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h3>
+<p>If experiencing low throughput:</p>
+<ol>
+<li>Increase batch sizes</li>
+<li>Optimize block size for your model</li>
+<li>Verify CUDA availability and compatibility</li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="the-engine-enginepy"><a class="header" href="#the-engine-enginepy">The Engine (<code>engine.py</code>)</a></h1>
-<p>The <code>InferenceEngine</code> class is the conductor of the orchestra. It ties everything together.</p>
-<h2 id="the-process-visualized-1"><a class="header" href="#the-process-visualized-1">The Process Visualized</a></h2>
-<pre><code class="language-mermaid">graph TD
-    User --&gt;|Prompts| Engine
-    Engine --&gt;|Request| Scheduler
-    Scheduler --&gt;|Batch| Engine
-    Engine --&gt;|Prefill| Model
-    Engine --&gt;|Decode| Model
-    Model --&gt;|Logits| Sampling
-    Sampling --&gt;|Token| Engine
+<h1 id="engine-orchestration"><a class="header" href="#engine-orchestration">Engine Orchestration</a></h1>
+<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<p>The Inference Engine serves as the main orchestrator of the Mini-YAIE system, coordinating between various components to provide a unified interface for LLM inference. The engine implements SGLang-style continuous batching with radial attention and prefix sharing to maximize efficiency and throughput.</p>
+<h2 id="engine-architecture"><a class="header" href="#engine-architecture">Engine Architecture</a></h2>
+<p>The main engine is implemented in <code>src/engine.py</code> and follows a modular design pattern where each component is responsible for specific aspects of request processing:</p>
+<pre><code>┌─────────────────┐
+│   API Layer     │  ← Requests enter here
+├─────────────────┤
+│ Engine Orchestration │  ← Coordination happens here
+├─────────────────┤
+│   Scheduler     │  ← Request scheduling
+├─────────────────┤
+│  Memory Manager │  ← KV-cache management
+├─────────────────┤
+│  Attention Core │  ← Radial attention computation
+├─────────────────┤
+│  Model/Kernel   │  ← Forward pass execution
+└─────────────────┘
 </code></pre>
-<h2 id="responsibilities"><a class="header" href="#responsibilities">Responsibilities</a></h2>
+<h2 id="core-components-1"><a class="header" href="#core-components-1">Core Components</a></h2>
+<h3 id="1-model-loading-integration"><a class="header" href="#1-model-loading-integration">1. Model Loading Integration</a></h3>
+<p>The engine handles model and tokenizer loading through the ModelLoader component:</p>
+<pre><code class="language-python">def __init__(self, model_name: str):
+    self.tokenizer: PreTrainedTokenizer = self._load_tokenizer()
+    self.model = self._load_model()
+</code></pre>
+<p>This ensures that models are properly loaded from HuggingFace or local cache with appropriate configuration.</p>
+<h3 id="2-sglang-style-scheduler"><a class="header" href="#2-sglang-style-scheduler">2. SGLang-Style Scheduler</a></h3>
+<p>The engine integrates with the SGLangScheduler for advanced request scheduling:</p>
+<pre><code class="language-python">self.scheduler = SGLangScheduler(
+    max_batch_size=8, 
+    max_prefill_batch_size=16, 
+    max_decode_batch_size=256
+)
+</code></pre>
+<p>The scheduler implements prefix grouping and multi-step processing for computation sharing.</p>
+<h3 id="3-radial-attention-system"><a class="header" href="#3-radial-attention-system">3. Radial Attention System</a></h3>
+<p>The engine connects to the radial attention mechanism:</p>
+<pre><code class="language-python">self.radix_attention = RadixAttentionWithPagedKVCache(
+    num_layers=self.model.config.num_hidden_layers,
+    num_heads=self.model.config.num_attention_heads,
+    head_dim=self.model.config.hidden_size // self.model.config.num_attention_heads,
+)
+</code></pre>
+<h3 id="4-kv-cache-management"><a class="header" href="#4-kv-cache-management">4. KV-Cache Management</a></h3>
+<p>The engine manages memory through the KVCacheManager:</p>
+<pre><code class="language-python">self.kv_cache_manager = KVCacheManager(
+    num_blocks=2000,
+    block_size=16,
+    num_heads=self.model.config.num_attention_heads,
+    head_dim=self.model.config.hidden_size // self.model.config.num_attention_heads,
+    dtype=torch.float16,
+)
+</code></pre>
+<h2 id="request-processing-flow"><a class="header" href="#request-processing-flow">Request Processing Flow</a></h2>
+<h3 id="1-request-addition"><a class="header" href="#1-request-addition">1. Request Addition</a></h3>
+<pre><code class="language-python">def generate(self, prompts: List[str], **kwargs) -&gt; List[str]:
+    # Add requests to scheduler
+    request_ids = []
+    for prompt in prompts:
+        req_id = self.scheduler.add_request(prompt, **kwargs)
+        request_ids.append(req_id)
+</code></pre>
+<h3 id="2-generation-loop"><a class="header" href="#2-generation-loop">2. Generation Loop</a></h3>
+<p>The engine runs a main generation loop that processes requests:</p>
+<pre><code class="language-python">def _run_generation_loop(self, request_ids: List[str]) -&gt; List[str]:
+    # Process requests in batches
+    # Handle prefill and decode phases
+    # Manage KV-cache efficiently
+</code></pre>
+<h3 id="3-response-generation"><a class="header" href="#3-response-generation">3. Response Generation</a></h3>
+<p>The engine generates responses with proper tokenization and formatting:</p>
+<pre><code class="language-python"># Generate response using the existing generate method
+responses = self.generate([formatted_prompt], **kwargs)
+generated_text = responses[0] if responses else ""
+</code></pre>
+<h2 id="sglang-style-optimization-features"><a class="header" href="#sglang-style-optimization-features">SGLang-Style Optimization Features</a></h2>
+<h3 id="1-continuous-batching"><a class="header" href="#1-continuous-batching">1. Continuous Batching</a></h3>
+<p>The engine supports continuous batching where requests at different stages can be processed together:</p>
 <ul>
-<li><strong>Initialization</strong>: Loads the Model, Tokenizer, Scheduler, and Memory Manager.</li>
-<li><strong>Request Entry</strong>: Accepts <code>generate()</code> calls and pushes them to the Scheduler.</li>
-<li><strong>The Loop</strong>: Runs the continuous batching loop <code>_run_generation_loop</code>.</li>
+<li>Prefill requests (processing full prompts)</li>
+<li>Decode requests (generating single tokens)</li>
+<li>Mixed batches combining both types</li>
 </ul>
-<h2 id="key-method-_run_generation_loop"><a class="header" href="#key-method-_run_generation_loop">Key Method: <code>_run_generation_loop</code></a></h2>
-<p>This is the heart of continuous batching.</p>
-<pre><code class="language-python">while has_active_requests:
-    # 1. Ask Scheduler for work
-    prefill_batch, decode_batch = scheduler.schedule_step()
-
-    # 2. Run Prefill (Compute-bound)
-    if prefill_batch:
-        run_prefill(prefill_batch)
-
-    # 3. Run Decode (Memory-bound)
-    if decode_batch:
-        run_decode(decode_batch)
+<h3 id="2-prefix-sharing"><a class="header" href="#2-prefix-sharing">2. Prefix Sharing</a></h3>
+<p>The engine enables computation sharing for requests with common prefixes:</p>
+<ul>
+<li>Radix tree identifies shared prefixes</li>
+<li>Common computations are performed once</li>
+<li>Results are shared among multiple requests</li>
+</ul>
+<h3 id="3-memory-efficiency"><a class="header" href="#3-memory-efficiency">3. Memory Efficiency</a></h3>
+<p>The engine optimizes memory usage through:</p>
+<ul>
+<li>Paged KV-cache management</li>
+<li>Block allocation strategies</li>
+<li>Memory reclamation for completed requests</li>
+</ul>
+<h2 id="api-integration"><a class="header" href="#api-integration">API Integration</a></h2>
+<h3 id="1-chat-completion-api"><a class="header" href="#1-chat-completion-api">1. Chat Completion API</a></h3>
+<p>The engine provides OpenAI-compatible chat completion:</p>
+<pre><code class="language-python">def chat_completion(self, messages: List[Dict[str, str]], **kwargs) -&gt; Dict[str, Any]:
+    # Format messages using chat template
+    # Process through generation pipeline
+    # Return in OpenAI format
 </code></pre>
-<p>In Mini-YAIE, the loop logic is simplified for education, but the structure mirrors production engines.</p>
+<h3 id="2-streaming-support"><a class="header" href="#2-streaming-support">2. Streaming Support</a></h3>
+<p>The engine supports streaming responses for real-time applications:</p>
+<pre><code class="language-python">def chat_completion_stream(self, messages: List[Dict[str, str]], **kwargs):
+    # Generate tokens one by one
+    # Yield chunks immediately
+    # Maintain OpenAI stream format
+</code></pre>
+<h2 id="performance-optimization"><a class="header" href="#performance-optimization">Performance Optimization</a></h2>
+<h3 id="1-batch-size-management"><a class="header" href="#1-batch-size-management">1. Batch Size Management</a></h3>
+<p>The engine dynamically adjusts batch sizes based on available memory and request characteristics:</p>
+<ul>
+<li>Prefill batches: Optimized for prompt processing</li>
+<li>Decode batches: Optimized for token generation</li>
+<li>Mixed batches: Balanced between both phases</li>
+</ul>
+<h3 id="2-memory-management"><a class="header" href="#2-memory-management">2. Memory Management</a></h3>
+<p>The engine coordinates memory usage across components:</p>
+<pre><code class="language-python"># Connect scheduler to memory manager for optimization
+self.scheduler.connect_memory_manager(self.kv_cache_manager)
+</code></pre>
+<h3 id="3-computation-sharing"><a class="header" href="#3-computation-sharing">3. Computation Sharing</a></h3>
+<p>The engine maximizes computation sharing through radix attention:</p>
+<ul>
+<li>Shared prefix processing</li>
+<li>Common token computations</li>
+<li>Reduced redundant calculations</li>
+</ul>
+<h2 id="error-handling-and-resilience"><a class="header" href="#error-handling-and-resilience">Error Handling and Resilience</a></h2>
+<h3 id="1-request-validation"><a class="header" href="#1-request-validation">1. Request Validation</a></h3>
+<p>The engine validates requests before processing:</p>
+<ul>
+<li>Input format validation</li>
+<li>Parameter range checking</li>
+<li>Resource availability verification</li>
+</ul>
+<h3 id="2-graceful-degradation"><a class="header" href="#2-graceful-degradation">2. Graceful Degradation</a></h3>
+<p>When resources are constrained, the engine gracefully degrades:</p>
+<ul>
+<li>Reduced batch sizes</li>
+<li>Fallback mechanisms</li>
+<li>Proper error reporting</li>
+</ul>
+<h3 id="3-resource-management"><a class="header" href="#3-resource-management">3. Resource Management</a></h3>
+<p>The engine manages system resources effectively:</p>
+<ul>
+<li>GPU memory monitoring</li>
+<li>Request queue management</li>
+<li>Memory cleanup for completed requests</li>
+</ul>
+<h2 id="integration-points-1"><a class="header" href="#integration-points-1">Integration Points</a></h2>
+<h3 id="1-model-interface"><a class="header" href="#1-model-interface">1. Model Interface</a></h3>
+<p>The engine interfaces with any HuggingFace-compatible model:</p>
+<pre><code class="language-python">outputs = self.model(current_ids)  # Standard HuggingFace model interface
+</code></pre>
+<h3 id="2-sampling-integration"><a class="header" href="#2-sampling-integration">2. Sampling Integration</a></h3>
+<p>The engine uses the sampling kernel for token generation:</p>
+<pre><code class="language-python">sampling_kernel = SamplingKernel()
+next_token_id = sampling_kernel.sample(
+    next_token_logits,
+    temperature=request.temperature,
+    top_p=request.top_p
+)
+</code></pre>
+<h3 id="3-scheduler-integration"><a class="header" href="#3-scheduler-integration">3. Scheduler Integration</a></h3>
+<p>The engine coordinates closely with the scheduler:</p>
+<pre><code class="language-python"># Add requests to scheduler
+req_id = self.scheduler.add_request(prompt, **kwargs)
+# Process in generation loop
+responses = self._run_generation_loop(request_ids)
+</code></pre>
+<h2 id="engine-configuration-1"><a class="header" href="#engine-configuration-1">Engine Configuration</a></h2>
+<p>The engine supports various configuration options:</p>
+<ul>
+<li>Model selection and loading</li>
+<li>Batch size limits</li>
+<li>Memory allocation settings</li>
+<li>Performance optimization parameters</li>
+</ul>
+<h2 id="future-extensions-1"><a class="header" href="#future-extensions-1">Future Extensions</a></h2>
+<p>The engine design supports:</p>
+<ul>
+<li>Additional optimization techniques</li>
+<li>New attention mechanisms</li>
+<li>Enhanced scheduling algorithms</li>
+<li>Advanced memory management strategies</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="the-scheduler-coresglang_schedulerpy"><a class="header" href="#the-scheduler-coresglang_schedulerpy">The Scheduler (<code>core/sglang_scheduler.py</code>)</a></h1>
-<p>The <code>SGLangScheduler</code> is the “Brain”. It decides <em>what</em> runs <em>when</em>.</p>
-<h2 id="sglang-features"><a class="header" href="#sglang-features">SGLang Features</a></h2>
-<p>Unlike a simple FIFO queue, this scheduler is aware of <strong>Radix Attention</strong>.</p>
-<h3 id="prefix-hashing"><a class="header" href="#prefix-hashing">Prefix Hashing</a></h3>
-<p>When a request arrives, <code>_calculate_prefix_hash</code> identifies its common prefix.</p>
-<pre><code class="language-python"># Simplified Logic
-prefix_hash = sha256(prompt)
+<h1 id="scheduler-logic-sglang-style-request-management"><a class="header" href="#scheduler-logic-sglang-style-request-management">Scheduler Logic: SGLang-Style Request Management</a></h1>
+<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<p>The SGLang-style scheduler (<code>core/sglang_scheduler.py</code>) implements advanced request scheduling with prefix grouping and computation sharing capabilities. Unlike traditional schedulers, this implementation focuses on maximizing computational efficiency by identifying and leveraging shared prefixes among different requests.</p>
+<h2 id="key-concepts"><a class="header" href="#key-concepts">Key Concepts</a></h2>
+<h3 id="request-states"><a class="header" href="#request-states">Request States</a></h3>
+<p>The scheduler manages requests through several states:</p>
+<ul>
+<li><strong>PENDING</strong>: New requests awaiting initial processing</li>
+<li><strong>SCHEDULED_PREFILL</strong>: Requests ready for prefill phase</li>
+<li><strong>RUNNING_PREFILL</strong>: Currently processing full prompts</li>
+<li><strong>SCHEDULED_DECODE</strong>: Requests ready for token generation</li>
+<li><strong>RUNNING_DECODE</strong>: Currently generating tokens</li>
+<li><strong>COMPLETED</strong>: Finished requests</li>
+<li><strong>CANCELLED</strong>: Cancelled requests</li>
+</ul>
+<h3 id="prefix-based-grouping"><a class="header" href="#prefix-based-grouping">Prefix-Based Grouping</a></h3>
+<p>The scheduler uses prefix hashing to group requests with common prefixes:</p>
+<pre><code class="language-python">def _calculate_prefix_hash(self, prompt: str) -&gt; Optional[str]:
+    # Calculate hash to identify common prefixes
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 </code></pre>
-<p>In a full implementation, this uses the Radix Tree to find the precise token match.</p>
-<h3 id="scheduling-policy"><a class="header" href="#scheduling-policy">Scheduling Policy</a></h3>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<h3 id="core-data-structures"><a class="header" href="#core-data-structures">Core Data Structures</a></h3>
+<h4 id="request-management"><a class="header" href="#request-management">Request Management</a></h4>
+<pre><code class="language-python"># Separate queues for different processing phases
+self.pending_requests: List[Request] = []
+self.prefill_requests: List[Request] = []
+self.running_prefill: List[Request] = []
+self.decode_requests: List[Request] = []
+self.running_decode: List[Request] = []
+self.completed_requests: List[Request] = []
+</code></pre>
+<h4 id="prefix-grouping"><a class="header" href="#prefix-grouping">Prefix Grouping</a></h4>
+<pre><code class="language-python"># Group requests by common prefixes for shared computation
+self.prefix_groups: Dict[str, List[Request]] = defaultdict(list)
+self.request_lookup: Dict[str, Request] = {}
+</code></pre>
+<h3 id="scheduling-strategy"><a class="header" href="#scheduling-strategy">Scheduling Strategy</a></h3>
+<p>The scheduler implements a SGLang-inspired strategy:</p>
 <ol>
-<li><strong>Prioritize Decode</strong>: To minimize latency, we always try to run pending decode steps first.</li>
-<li><strong>Fill with Prefill</strong>: If there is leftover GPU memory (or batch size capacity), we pull new requests from the queue for prefill.</li>
+<li><strong>Prioritize Decode Requests</strong>: Minimize token-to-token latency</li>
+<li><strong>Maximize Prefill Efficiency</strong>: Process new requests efficiently</li>
+<li><strong>Leverage Prefix Sharing</strong>: Share computation for similar requests</li>
+<li><strong>Memory-Aware Scheduling</strong>: Respect KV-cache limitations</li>
 </ol>
-<pre><code class="language-mermaid">stateDiagram-v2
-    [*] --&gt; Pending
-    Pending --&gt; RunningPrefill : schedule_step()
-    RunningPrefill --&gt; ScheduledDecode : process_prefill()
-    ScheduledDecode --&gt; RunningDecode : schedule_step()
-    RunningDecode --&gt; ScheduledDecode : Not Finished
-    RunningDecode --&gt; Completed : Finished
-    Completed --&gt; [*]
+<h2 id="detailed-implementation"><a class="header" href="#detailed-implementation">Detailed Implementation</a></h2>
+<h3 id="request-lifecycle"><a class="header" href="#request-lifecycle">Request Lifecycle</a></h3>
+<h4 id="1-request-addition-1"><a class="header" href="#1-request-addition-1">1. Request Addition</a></h4>
+<pre><code class="language-python">def add_request(self, prompt: str, max_tokens: int = 128, ...) -&gt; str:
+    # Calculate prefix hash for grouping
+    prefix_hash = self._calculate_prefix_hash(prompt)
+    # Add to prefix group if applicable
+    if prefix_hash:
+        self.prefix_groups[prefix_hash].append(request)
+        request.request_group = prefix_hash
 </code></pre>
-<h2 id="state-machine"><a class="header" href="#state-machine">State Machine</a></h2>
-<p>Requests transition through states:
-<code>PENDING</code> -&gt; <code>RUNNING_PREFILL</code> -&gt; <code>SCHEDULED_DECODE</code> -&gt; <code>RUNNING_DECODE</code> -&gt; <code>COMPLETED</code></p>
+<h4 id="2-scheduling-step"><a class="header" href="#2-scheduling-step">2. Scheduling Step</a></h4>
+<pre><code class="language-python">def schedule_step(self) -&gt; Tuple[List[Request], List[Request]]:
+    # First, prioritize decode requests
+    decode_batch = []
+    prefill_batch = []
+    
+    # Calculate remaining capacity after decode allocation
+    remaining_capacity = self.max_batch_size - len(decode_batch)
+    
+    # Fill remaining capacity with prefill requests
+    if remaining_capacity &gt; 0:
+        num_prefills = min(len(prefill_candidates), remaining_capacity, self.max_prefill_batch_size)
+        prefill_batch = prefill_candidates[:num_prefills]
+</code></pre>
+<h3 id="batch-selection-policy"><a class="header" href="#batch-selection-policy">Batch Selection Policy</a></h3>
+<p>The scheduler implements a multi-level priority system:</p>
+<ol>
+<li><strong>Decode Priority</strong>: Continue existing generation to minimize latency</li>
+<li><strong>Prefill Efficiency</strong>: Process new requests in efficient batches</li>
+<li><strong>Memory Management</strong>: Ensure sufficient KV-cache for all requests</li>
+<li><strong>Prefix Sharing</strong>: Group similar requests for computation sharing</li>
+</ol>
+<h3 id="prefill-processing"><a class="header" href="#prefill-processing">Prefill Processing</a></h3>
+<p>Prefill requests undergo full prompt processing:</p>
+<pre><code class="language-python">def process_prefill_batch(self, requests: List[Request]) -&gt; List[Request]:
+    for req in requests:
+        # Process full prompt in one forward pass
+        req.status = RequestStatus.SCHEDULED_DECODE
+        # Initialize output sequence
+        if req.output_ids is None:
+            req.output_ids = []
+</code></pre>
+<h3 id="decode-processing"><a class="header" href="#decode-processing">Decode Processing</a></h3>
+<p>Decode requests generate tokens one-by-one:</p>
+<pre><code class="language-python">def process_decode_batch(self, requests: List[Request]) -&gt; List[Request]:
+    for req in requests:
+        # Get logits from model (simplified)
+        dummy_logits = torch.randn(1, 1000)
+        
+        # Sample next token using kernel
+        next_token_tensor = self.sampling_kernel.sample(
+            dummy_logits,
+            temperature=req.temperature,
+            top_p=req.top_p
+        )
+        
+        # Update position and check termination
+        req.current_position += 1
+        if req.current_position &gt;= req.max_tokens:
+            req.status = RequestStatus.COMPLETED
+</code></pre>
+<h2 id="sglang-style-optimizations"><a class="header" href="#sglang-style-optimizations">SGLang-Style Optimizations</a></h2>
+<h3 id="1-computation-sharing"><a class="header" href="#1-computation-sharing">1. Computation Sharing</a></h3>
+<p>The scheduler identifies requests with shared prefixes:</p>
+<pre><code class="language-python">def find_shared_prefixes(self, token_ids: List[int]) -&gt; Tuple[List[str], List[int]]:
+    # Traverse radix tree to find matching prefixes
+    # Return requests that can share computation
+</code></pre>
+<h3 id="2-memory-aware-scheduling"><a class="header" href="#2-memory-aware-scheduling">2. Memory-Aware Scheduling</a></h3>
+<p>The scheduler connects to the memory manager for KV-cache coordination:</p>
+<pre><code class="language-python">def connect_memory_manager(self, memory_manager):
+    self.memory_manager = memory_manager
+</code></pre>
+<h3 id="3-continuous-batching"><a class="header" href="#3-continuous-batching">3. Continuous Batching</a></h3>
+<p>The scheduler maintains continuous processing by balancing prefill and decode requests:</p>
+<ul>
+<li>Decode requests have higher priority (latency-sensitive)</li>
+<li>Prefill requests fill remaining batch capacity</li>
+<li>Memory requirements are considered during scheduling</li>
+</ul>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<h3 id="batch-size-optimization"><a class="header" href="#batch-size-optimization">Batch Size Optimization</a></h3>
+<p>The scheduler uses different batch size limits:</p>
+<ul>
+<li><code>max_prefill_batch_size</code>: Limits prefill batch size for memory efficiency</li>
+<li><code>max_decode_batch_size</code>: Larger limit for decode due to smaller memory footprint</li>
+<li><code>max_batch_size</code>: Overall system limit</li>
+</ul>
+<h3 id="memory-management-1"><a class="header" href="#memory-management-1">Memory Management</a></h3>
+<p>The scheduler coordinates with the KV-cache manager to:</p>
+<ul>
+<li>Allocate blocks for new requests</li>
+<li>Track memory usage during processing</li>
+<li>Ensure sufficient memory for scheduled requests</li>
+</ul>
+<h2 id="integration-with-other-components"><a class="header" href="#integration-with-other-components">Integration with Other Components</a></h2>
+<h3 id="memory-manager-integration"><a class="header" href="#memory-manager-integration">Memory Manager Integration</a></h3>
+<pre><code class="language-python">def process_prefill_batch(self, requests: List[Request]) -&gt; List[Request]:
+    if self.memory_manager:
+        # Allocate KV cache blocks for requests
+        pass
+</code></pre>
+<h3 id="sampling-kernel-integration"><a class="header" href="#sampling-kernel-integration">Sampling Kernel Integration</a></h3>
+<pre><code class="language-python">def process_decode_batch(self, requests: List[Request]) -&gt; List[Request]:
+    # Use sampling kernel for token selection
+    next_token_tensor = self.sampling_kernel.sample(...)
+</code></pre>
+<h2 id="request-status-monitoring"><a class="header" href="#request-status-monitoring">Request Status Monitoring</a></h2>
+<h3 id="queue-status"><a class="header" href="#queue-status">Queue Status</a></h3>
+<p>The scheduler provides detailed status information:</p>
+<pre><code class="language-python">def get_queue_status(self) -&gt; Dict[str, int]:
+    return {
+        "pending": len(self.pending_requests),
+        "prefill_queue": len(self.prefill_requests),
+        "running_prefill": len(self.running_prefill),
+        "decode_queue": len(self.decode_requests),
+        "running_decode": len(self.running_decode),
+        "completed": len(self.completed_requests),
+        "total_active": self.get_active_request_count(),
+    }
+</code></pre>
+<h3 id="request-result-access"><a class="header" href="#request-result-access">Request Result Access</a></h3>
+<pre><code class="language-python">def get_request_result(self, req_id: str) -&gt; Optional[Dict[str, Any]]:
+    # Check completed requests for results
+</code></pre>
+<h2 id="implementation-challenges"><a class="header" href="#implementation-challenges">Implementation Challenges</a></h2>
+<h3 id="1-prefix-hashing"><a class="header" href="#1-prefix-hashing">1. Prefix Hashing</a></h3>
+<p>For educational purposes, the implementation uses simple string hashing. In production:</p>
+<ul>
+<li>Use token ID sequences for more accurate prefix matching</li>
+<li>Implement more sophisticated similarity measures</li>
+<li>Consider semantic similarity for better grouping</li>
+</ul>
+<h3 id="2-memory-allocation"><a class="header" href="#2-memory-allocation">2. Memory Allocation</a></h3>
+<p>The current implementation shows integration points for memory management. A full implementation would:</p>
+<ul>
+<li>Calculate precise memory requirements</li>
+<li>Implement cache eviction policies</li>
+<li>Handle memory fragmentation</li>
+</ul>
+<h3 id="3-computation-sharing-1"><a class="header" href="#3-computation-sharing-1">3. Computation Sharing</a></h3>
+<p>The radix tree integration points exist but require full implementation of:</p>
+<ul>
+<li>Efficient tree traversal</li>
+<li>Shared computation tracking</li>
+<li>Result distribution to multiple requests</li>
+</ul>
+<h2 id="scheduling-algorithm-details"><a class="header" href="#scheduling-algorithm-details">Scheduling Algorithm Details</a></h2>
+<h3 id="step-by-step-process"><a class="header" href="#step-by-step-process">Step-by-Step Process</a></h3>
+<ol>
+<li><strong>Decode Prioritization</strong>: Schedule as many decode requests as possible</li>
+<li><strong>Capacity Calculation</strong>: Determine remaining batch capacity</li>
+<li><strong>Prefill Scheduling</strong>: Fill remaining capacity with prefill requests</li>
+<li><strong>Memory Verification</strong>: Confirm sufficient KV-cache availability</li>
+<li><strong>Batch Execution</strong>: Process scheduled requests</li>
+</ol>
+<h3 id="optimization-strategies"><a class="header" href="#optimization-strategies">Optimization Strategies</a></h3>
+<p>The scheduler implements several optimization strategies:</p>
+<ol>
+<li><strong>Temporal Multiplexing</strong>: Interleave prefill and decode for efficiency</li>
+<li><strong>Spatial Multiplexing</strong>: Group similar requests for shared computation</li>
+<li><strong>Memory Multiplexing</strong>: Optimize KV-cache usage across requests</li>
+</ol>
+<h2 id="future-extensions-2"><a class="header" href="#future-extensions-2">Future Extensions</a></h2>
+<p>The scheduler design supports:</p>
+<ul>
+<li>Advanced prefix matching algorithms</li>
+<li>Dynamic batch size adjustment</li>
+<li>Request preemption and rescheduling</li>
+<li>Multi-GPU coordination</li>
+<li>Custom scheduling policies</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="memory-manager-kernelskv_cachepy"><a class="header" href="#memory-manager-kernelskv_cachepy">Memory Manager (<code>kernels/kv_cache.py</code>)</a></h1>
-<p>The <code>KVCacheManager</code> is the “Allocator”. It manages the Paged KV Cache.</p>
-<h2 id="the-block-table"><a class="header" href="#the-block-table">The Block Table</a></h2>
-<p>Just like an OS manages RAM pages, this manager tracks GPU memory blocks.</p>
+<h1 id="memory-management-paged-kv-cache-system"><a class="header" href="#memory-management-paged-kv-cache-system">Memory Management: Paged KV-Cache System</a></h1>
+<h2 id="overview-3"><a class="header" href="#overview-3">Overview</a></h2>
+<p>The memory management system in Mini-YAIE implements a paged KV-cache mechanism inspired by systems like vLLM and SGLang. This approach addresses the memory fragmentation challenges in LLM inference by using fixed-size memory blocks (pages) that can be allocated and deallocated independently for each request.</p>
+<h2 id="core-concepts"><a class="header" href="#core-concepts">Core Concepts</a></h2>
+<h3 id="paged-memory-architecture"><a class="header" href="#paged-memory-architecture">Paged Memory Architecture</a></h3>
+<p>Traditional KV-cache management allocates contiguous memory blocks for each request, leading to fragmentation when requests have varying lengths. Paged KV-cache solves this by:</p>
 <ul>
-<li><strong>Physical Blocks</strong>: Fixed-size tensors in GPU memory (e.g., <code>[num_blocks, block_size, head_dim]</code>).</li>
-<li><strong>Logical Slots</strong>: The token positions in a sequence.</li>
+<li>Dividing the KV-cache into fixed-size blocks (pages)</li>
+<li>Allowing requests to use non-contiguous memory blocks</li>
+<li>Enabling efficient memory reuse and sharing</li>
 </ul>
-<h2 id="key-methods"><a class="header" href="#key-methods">Key Methods</a></h2>
+<h3 id="key-benefits"><a class="header" href="#key-benefits">Key Benefits</a></h3>
+<ol>
+<li><strong>Reduced Fragmentation</strong>: Fixed-size blocks prevent memory fragmentation</li>
+<li><strong>Efficient Memory Utilization</strong>: Unused blocks can be allocated to other requests</li>
+<li><strong>Scalability</strong>: Supports variable-length requests without memory waste</li>
+<li><strong>Computation Sharing</strong>: Enables shared prefixes to use the same memory blocks</li>
+</ol>
+<h2 id="architecture-1"><a class="header" href="#architecture-1">Architecture</a></h2>
+<h3 id="kvcacheblock-class"><a class="header" href="#kvcacheblock-class">KVCacheBlock Class</a></h3>
+<p>Each <code>KVCacheBlock</code> represents a fixed-size memory block:</p>
+<pre><code class="language-python">class KVCacheBlock:
+    def __init__(self, block_id: int, size: int, num_heads: int, head_dim: int, ...):
+        self.block_id = block_id  # Unique identifier for the block
+        self.size = size          # Number of tokens this block can hold
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.keys = None          # [size, num_heads, head_dim] tensor
+        self.values = None        # [size, num_heads, head_dim] tensor
+</code></pre>
+<h3 id="kvcachemanager-class"><a class="header" href="#kvcachemanager-class">KVCacheManager Class</a></h3>
+<p>The main manager orchestrates all memory operations:</p>
+<pre><code class="language-python">class KVCacheManager:
+    def __init__(self, num_blocks: int, block_size: int, num_heads: int, head_dim: int, ...):
+        self.num_blocks = num_blocks      # Total number of blocks in the pool
+        self.block_size = block_size      # Size of each block in tokens
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.blocks: List[KVCacheBlock] = []  # Pool of all blocks
+        self.free_block_list: List[int] = []  # Available blocks for allocation
+        self.block_tables: dict = {}      # Maps request_id to list of block_ids
+</code></pre>
+<h2 id="memory-management-operations"><a class="header" href="#memory-management-operations">Memory Management Operations</a></h2>
+<h3 id="1-block-allocation"><a class="header" href="#1-block-allocation">1. Block Allocation</a></h3>
+<p>When a request needs KV-cache memory, the manager allocates the required number of blocks:</p>
+<pre><code class="language-python">def allocate_blocks(self, request_id: str, num_tokens: int) -&gt; List[int]:
+    # Calculate required blocks
+    num_blocks_needed = (num_tokens + self.block_size - 1) // self.block_size
+    
+    # Check availability
+    if len(self.free_block_list) &lt; num_blocks_needed:
+        raise RuntimeError("Not enough free blocks")
+    
+    # Allocate from free list
+    allocated_block_ids = []
+    for _ in range(num_blocks_needed):
+        block_id = self.free_block_list.pop(0)  # Remove from free list
+        allocated_block_ids.append(block_id)
+        self.blocks[block_id].allocate()  # Allocate GPU memory
+    
+    # Track allocation
+    self.block_tables[request_id] = allocated_block_ids
+    return allocated_block_ids
+</code></pre>
+<p><strong>Key Aspects:</strong></p>
 <ul>
-<li><code>allocate_blocks(request)</code>: Finds free physical blocks and assigns them to a request.</li>
-<li><code>free_blocks(request)</code>: Returns blocks to the free pool.</li>
-<li><code>get_block_table(request)</code>: Returns the mapping <code>[logical_idx -&gt; physical_idx]</code> for the attention kernel.</li>
+<li>Calculates minimum blocks needed based on token count and block size</li>
+<li>Ensures sufficient free blocks before allocation</li>
+<li>Updates free block list and request tracking</li>
+<li>Actually allocates GPU memory for the blocks</li>
 </ul>
-<p><strong>Student Task</strong>: You will implement the allocation logic in the Python Kernels phase.</p>
+<h3 id="2-block-deallocation"><a class="header" href="#2-block-deallocation">2. Block Deallocation</a></h3>
+<p>When requests complete, their blocks are returned to the free pool:</p>
+<pre><code class="language-python">def free_blocks(self, request_id: str):
+    if request_id in self.block_tables:
+        block_ids = self.block_tables[request_id]
+        self.free_block_list.extend(block_ids)  # Return to free pool
+        self.free_block_list.sort()  # Maintain sorted order
+        del self.block_tables[request_id]  # Remove tracking entry
+        
+        # Optionally clear tensors to free GPU memory
+        for block_id in block_ids:
+            self.blocks[block_id].keys = None
+            self.blocks[block_id].values = None
+</code></pre>
+<p><strong>Key Aspects:</strong></p>
+<ul>
+<li>Returns blocks to the free list for reuse</li>
+<li>Maintains sorted order for allocation efficiency</li>
+<li>Removes request tracking information</li>
+<li>Optionally clears GPU tensors to free memory</li>
+</ul>
+<h3 id="3-block-copying"><a class="header" href="#3-block-copying">3. Block Copying</a></h3>
+<p>For advanced operations like request preemption or memory defragmentation:</p>
+<pre><code class="language-python">def copy_blocks(self, src_block_ids: List[int], dst_block_ids: List[int]):
+    if len(src_block_ids) != len(dst_block_ids):
+        raise ValueError("Source and destination lists must have same length")
+    
+    for src_id, dst_id in zip(src_block_ids, dst_block_ids):
+        src_block = self.blocks[src_id]
+        dst_block = self.blocks[dst_id]
+        
+        # Allocate destination if needed
+        if dst_block.keys is None or dst_block.values is None:
+            dst_block.allocate()
+        
+        # Copy data
+        with torch.no_grad():
+            dst_block.keys.copy_(src_block.keys)
+            dst_block.values.copy_(src_block.values)
+</code></pre>
+<h2 id="memory-layout-and-access"><a class="header" href="#memory-layout-and-access">Memory Layout and Access</a></h2>
+<h3 id="block-organization"><a class="header" href="#block-organization">Block Organization</a></h3>
+<p>The memory is organized as a collection of fixed-size blocks:</p>
+<pre><code>Global Memory Pool:
+┌─────────┬─────────┬─────────┬─────────┬─────────┬─────────┐
+│ Block 0 │ Block 1 │ Block 2 │ Block 3 │ Block 4 │ Block 5 │
+│ [16xHxD]│ [16xHxD]│ [16xHxD]│ [16xHxD]│ [16xHxD]│ [16xHxD]│
+└─────────┴─────────┴─────────┴─────────┴─────────┴─────────┘
+
+Request A: Uses [Block 0, Block 2] for non-contiguous sequence storage
+Request B: Uses [Block 1, Block 4, Block 5] for its sequence
+</code></pre>
+<p>Where H = num_heads and D = head_dim</p>
+<h3 id="block-tables"><a class="header" href="#block-tables">Block Tables</a></h3>
+<p>Each request has an associated block table that maps logical token positions to physical blocks:</p>
+<pre><code>Request A Block Table:
+Logical: [0-15][16-31][32-47][48-63][64-79]
+Physical: Block0 Block2  -     -     Block4
+</code></pre>
+<h2 id="integration-with-sglang-features"><a class="header" href="#integration-with-sglang-features">Integration with SGLang Features</a></h2>
+<h3 id="computation-sharing"><a class="header" href="#computation-sharing">Computation Sharing</a></h3>
+<p>The paged system enables computation sharing by allowing requests with shared prefixes to reference the same memory blocks:</p>
+<ul>
+<li>Requests with common prefixes can share the same KV-cache blocks</li>
+<li>Multiple requests can reference the same physical memory location</li>
+<li>Reduces redundant computation and memory usage</li>
+</ul>
+<h3 id="memory-efficiency-1"><a class="header" href="#memory-efficiency-1">Memory Efficiency</a></h3>
+<p>By using fixed-size blocks:</p>
+<ul>
+<li>Memory fragmentation is eliminated</li>
+<li>Block reuse is maximized</li>
+<li>Memory utilization approaches optimal levels</li>
+</ul>
+<h2 id="performance-considerations-1"><a class="header" href="#performance-considerations-1">Performance Considerations</a></h2>
+<h3 id="block-size-selection"><a class="header" href="#block-size-selection">Block Size Selection</a></h3>
+<p>The block size parameter is critical for performance:</p>
+<ul>
+<li><strong>Smaller blocks</strong>: Less internal fragmentation, more overhead for block management</li>
+<li><strong>Larger blocks</strong>: More internal fragmentation, less management overhead</li>
+<li><strong>Typical values</strong>: 8-32 tokens per block work well in practice</li>
+</ul>
+<h3 id="memory-allocation-strategy"><a class="header" href="#memory-allocation-strategy">Memory Allocation Strategy</a></h3>
+<p>The system uses a simple first-fit strategy:</p>
+<pre><code class="language-python"># Allocate from beginning of free list
+block_id = self.free_block_list.pop(0)
+</code></pre>
+<p>For production systems, more sophisticated strategies might include:</p>
+<ul>
+<li>Best-fit to minimize fragmentation</li>
+<li>Coalescing strategies to combine blocks</li>
+<li>Preallocation to reduce allocation overhead</li>
+</ul>
+<h2 id="memory-safety-and-management"><a class="header" href="#memory-safety-and-management">Memory Safety and Management</a></h2>
+<h3 id="gpu-memory-management"><a class="header" href="#gpu-memory-management">GPU Memory Management</a></h3>
+<p>The system ensures proper GPU memory allocation:</p>
+<pre><code class="language-python">def allocate(self):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    self.keys = torch.zeros(
+        self.size, self.num_heads, self.head_dim, 
+        dtype=self.dtype, device=device
+    )
+    self.values = torch.zeros(
+        self.size, self.num_heads, self.head_dim, 
+        dtype=self.dtype, device=device
+    )
+</code></pre>
+<h3 id="memory-cleanup"><a class="header" href="#memory-cleanup">Memory Cleanup</a></h3>
+<p>Proper cleanup prevents memory leaks:</p>
+<ul>
+<li>Free blocks when requests complete</li>
+<li>Clear GPU tensors to release memory</li>
+<li>Maintain consistent state in block tables</li>
+</ul>
+<h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
+<h3 id="dynamic-block-resizing"><a class="header" href="#dynamic-block-resizing">Dynamic Block Resizing</a></h3>
+<p>For requests that need to extend beyond their initial allocation:</p>
+<ul>
+<li>Allocate additional blocks as needed</li>
+<li>Maintain logical sequence continuity</li>
+<li>Update block tables accordingly</li>
+</ul>
+<h3 id="memory-pool-management"><a class="header" href="#memory-pool-management">Memory Pool Management</a></h3>
+<p>Advanced implementations might include:</p>
+<ul>
+<li>Block migration to reduce fragmentation</li>
+<li>Eviction policies for memory-constrained scenarios</li>
+<li>Prefetching strategies for better performance</li>
+</ul>
+<h2 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h2>
+<h3 id="out-of-memory-conditions"><a class="header" href="#out-of-memory-conditions">Out of Memory Conditions</a></h3>
+<p>The system handles memory exhaustion gracefully:</p>
+<pre><code class="language-python">if len(self.free_block_list) &lt; num_blocks_needed:
+    raise RuntimeError(f"Not enough free blocks. Need {num_blocks_needed}, have {len(self.free_block_list)}")
+</code></pre>
+<h3 id="block-validation"><a class="header" href="#block-validation">Block Validation</a></h3>
+<p>Before operations, the system validates block states:</p>
+<ul>
+<li>Verify blocks are allocated before accessing</li>
+<li>Check for proper tensor dimensions</li>
+<li>Validate request associations</li>
+</ul>
+<h2 id="future-enhancements"><a class="header" href="#future-enhancements">Future Enhancements</a></h2>
+<h3 id="memory-optimization-1"><a class="header" href="#memory-optimization-1">Memory Optimization</a></h3>
+<p>Potential improvements include:</p>
+<ul>
+<li>Compressed KV-cache storage</li>
+<li>Offloading to CPU memory when possible</li>
+<li>Cache eviction policies for long-running requests</li>
+</ul>
+<h3 id="performance-optimization-1"><a class="header" href="#performance-optimization-1">Performance Optimization</a></h3>
+<p>Advanced techniques might include:</p>
+<ul>
+<li>Block prefetching for better cache performance</li>
+<li>Heterogeneous memory management (different memory types)</li>
+<li>Asynchronous memory operations</li>
+</ul>
+<h2 id="implementation-variations"><a class="header" href="#implementation-variations">Implementation Variations</a></h2>
+<h3 id="sglang-style-memory-management"><a class="header" href="#sglang-style-memory-management">SGLang-Style Memory Management</a></h3>
+<p>For SGLang-specific optimizations:</p>
+<ul>
+<li>Prefix sharing memory management</li>
+<li>Radix tree integration for shared computation</li>
+<li>Advanced scheduling based on memory access patterns</li>
+</ul>
+<h3 id="integration-points-2"><a class="header" href="#integration-points-2">Integration Points</a></h3>
+<p>The memory manager connects with other components:</p>
+<ul>
+<li>Scheduler: Provides memory availability information</li>
+<li>Attention modules: Access KV-cache through block tables</li>
+<li>Model execution: Uses paged cache for efficient attention computation</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="python-kernels-guide"><a class="header" href="#python-kernels-guide">Python Kernels Guide</a></h1>
-<p>This section guides you through implementing the core Python logic “kernels”. These are not CUDA kernels, but critical algorithmic components.</p>
-<h2 id="your-tasks"><a class="header" href="#your-tasks">Your Tasks</a></h2>
+<h2 id="overview-4"><a class="header" href="#overview-4">Overview</a></h2>
+<p>The Python kernels in Mini-YAIE implement the core computational components that enable SGLang-style inference optimization. These kernels provide the foundational functionality for attention mechanisms, memory management, and token sampling that make efficient LLM inference possible.</p>
+<h2 id="kernel-architecture"><a class="header" href="#kernel-architecture">Kernel Architecture</a></h2>
+<h3 id="core-components-2"><a class="header" href="#core-components-2">Core Components</a></h3>
+<p>The kernel system consists of several interconnected modules:</p>
 <ol>
-<li><strong>Radix Tree</strong>: Implement the Trie data structure for prefix matching.</li>
-<li><strong>KV Cache Manager</strong>: Implement the block allocation strategy.</li>
-<li><strong>Sampling</strong>: Implement the token sampling logic.</li>
+<li><strong>Radix Tree</strong>: Implements prefix matching for shared computation</li>
+<li><strong>KV Cache Manager</strong>: Manages paged key-value storage</li>
+<li><strong>Radix Attention Module</strong>: Implements radial attention with shared computation</li>
+<li><strong>Sampling Module</strong>: Provides token selection algorithms</li>
 </ol>
-<p><strong>Why Python?</strong>
-While computation happens in CUDA, the <em>logic</em> of memory management and prefix matching is complex and best handled in Python (or C++ CPU code) before dispatching to the GPU.</p>
+<h3 id="sglang-style-optimization-1"><a class="header" href="#sglang-style-optimization-1">SGLang-Style Optimization</a></h3>
+<p>The kernels are designed to support SGLang’s key optimization strategies:</p>
+<ul>
+<li><strong>Prefix Sharing</strong>: Share computation for requests with common prefixes</li>
+<li><strong>Continuous Batching</strong>: Dynamically batch requests at different processing stages</li>
+<li><strong>Paged Memory Management</strong>: Efficiently manage KV-cache memory using fixed-size blocks</li>
+<li><strong>Radial Attention</strong>: Optimize attention computation for shared prefixes</li>
+</ul>
+<h2 id="python-kernel-implementation"><a class="header" href="#python-kernel-implementation">Python Kernel Implementation</a></h2>
+<h3 id="design-philosophy"><a class="header" href="#design-philosophy">Design Philosophy</a></h3>
+<p>The Python kernels follow these design principles:</p>
+<h4 id="1-educational-focus"><a class="header" href="#1-educational-focus">1. Educational Focus</a></h4>
+<ul>
+<li>Clean, well-documented code</li>
+<li>Clear algorithm implementation</li>
+<li>Comprehensive comments explaining concepts</li>
+</ul>
+<h4 id="2-sglang-compatibility"><a class="header" href="#2-sglang-compatibility">2. SGLang Compatibility</a></h4>
+<ul>
+<li>Implement SGLang-style optimization techniques</li>
+<li>Support for radial attention and prefix sharing</li>
+<li>Continuous batching integration</li>
+</ul>
+<h4 id="3-modularity"><a class="header" href="#3-modularity">3. Modularity</a></h4>
+<ul>
+<li>Independent components that can be tested individually</li>
+<li>Clean interfaces between components</li>
+<li>Easy to extend and modify</li>
+</ul>
+<h4 id="4-performance-considerations"><a class="header" href="#4-performance-considerations">4. Performance Considerations</a></h4>
+<ul>
+<li>Efficient data structures</li>
+<li>Proper memory management</li>
+<li>Optimized algorithm implementations</li>
+</ul>
+<h3 id="implementation-structure"><a class="header" href="#implementation-structure">Implementation Structure</a></h3>
+<p>Each kernel follows a similar pattern:</p>
+<pre><code class="language-python">class KernelName:
+    def __init__(self, parameters):
+        # Initialize kernel with configuration
+        pass
+    
+    def process(self, input_data):
+        # Core processing logic
+        pass
+    
+    def update_state(self, new_data):
+        # State management for ongoing requests
+        pass
+</code></pre>
+<h2 id="integration-with-system-components"><a class="header" href="#integration-with-system-components">Integration with System Components</a></h2>
+<h3 id="engine-integration-1"><a class="header" href="#engine-integration-1">Engine Integration</a></h3>
+<p>The kernels integrate seamlessly with the main inference engine:</p>
+<pre><code class="language-python"># Engine uses kernels for computation
+self.radix_attention = RadixAttentionWithPagedKVCache(...)
+self.kv_cache_manager = KVCacheManager(...)
+self.sampling_kernel = SamplingKernel()
+</code></pre>
+<h3 id="scheduler-coordination"><a class="header" href="#scheduler-coordination">Scheduler Coordination</a></h3>
+<p>Kernels work with the SGLang scheduler:</p>
+<ul>
+<li>Provide computation sharing opportunities</li>
+<li>Manage memory allocation and deallocation</li>
+<li>Coordinate with scheduling policies</li>
+</ul>
+<h3 id="memory-management-2"><a class="header" href="#memory-management-2">Memory Management</a></h3>
+<p>Kernels connect with the paged memory system:</p>
+<ul>
+<li>Request memory allocation through the manager</li>
+<li>Manage KV-cache blocks efficiently</li>
+<li>Support for shared memory blocks</li>
+</ul>
+<h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
+<h3 id="computational-efficiency"><a class="header" href="#computational-efficiency">Computational Efficiency</a></h3>
+<p>The Python kernels provide:</p>
+<ul>
+<li>Efficient attention computation</li>
+<li>Optimized memory access patterns</li>
+<li>Shared computation for common prefixes</li>
+</ul>
+<h3 id="memory-usage"><a class="header" href="#memory-usage">Memory Usage</a></h3>
+<p>Optimized memory management includes:</p>
+<ul>
+<li>Paged cache allocation</li>
+<li>Block-level memory sharing</li>
+<li>Efficient reuse of allocated blocks</li>
+</ul>
+<h3 id="scalability"><a class="header" href="#scalability">Scalability</a></h3>
+<p>The kernel design supports:</p>
+<ul>
+<li>Variable batch sizes</li>
+<li>Multiple concurrent requests</li>
+<li>Scaled performance with more requests</li>
+</ul>
+<h2 id="advanced-features-1"><a class="header" href="#advanced-features-1">Advanced Features</a></h2>
+<h3 id="computation-sharing-1"><a class="header" href="#computation-sharing-1">Computation Sharing</a></h3>
+<p>The radix tree and attention modules enable:</p>
+<ul>
+<li>Shared prefix identification</li>
+<li>Computation reuse across requests</li>
+<li>Efficient memory utilization</li>
+</ul>
+<h3 id="adaptive-processing"><a class="header" href="#adaptive-processing">Adaptive Processing</a></h3>
+<p>Kernels adapt to:</p>
+<ul>
+<li>Different request patterns</li>
+<li>Variable sequence lengths</li>
+<li>Changing memory requirements</li>
+</ul>
+<h2 id="testing-and-validation"><a class="header" href="#testing-and-validation">Testing and Validation</a></h2>
+<h3 id="unit-testing"><a class="header" href="#unit-testing">Unit Testing</a></h3>
+<p>Each kernel includes:</p>
+<ul>
+<li>Comprehensive unit tests</li>
+<li>Edge case validation</li>
+<li>Performance benchmarking</li>
+</ul>
+<h3 id="integration-testing"><a class="header" href="#integration-testing">Integration Testing</a></h3>
+<p>Kernels are tested as part of:</p>
+<ul>
+<li>Full inference pipeline</li>
+<li>SGLang-style optimization scenarios</li>
+<li>Memory management validation</li>
+</ul>
+<h2 id="extensibility"><a class="header" href="#extensibility">Extensibility</a></h2>
+<h3 id="adding-new-kernels"><a class="header" href="#adding-new-kernels">Adding New Kernels</a></h3>
+<p>The system supports:</p>
+<ul>
+<li>Easy addition of new kernel types</li>
+<li>Pluggable architecture for kernel replacement</li>
+<li>Backwards compatibility</li>
+</ul>
+<h3 id="customization"><a class="header" href="#customization">Customization</a></h3>
+<p>Kernels can be customized for:</p>
+<ul>
+<li>Specific model architectures</li>
+<li>Hardware optimization</li>
+<li>Performance tuning</li>
+</ul>
+<p>This Python kernel system forms the computational backbone of Mini-YAIE, implementing SGLang-style optimization techniques in an educational and accessible way.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="radix-tree-kernelsradix_treepy"><a class="header" href="#radix-tree-kernelsradix_treepy">Radix Tree (<code>kernels/radix_tree.py</code>)</a></h1>
 <h2 id="1-concept-the-prefix-tree"><a class="header" href="#1-concept-the-prefix-tree">1. Concept: The Prefix Tree</a></h2>
@@ -1046,65 +2163,887 @@ $Q \cdot K^T$, Softmax, $\cdot V$.</p>
 </ol>
 <p><em>Note: In the simplified version, this logic is often kept in CPU (Python) and only the KV indices are passed to the GPU.</em></p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="api-endpoints-serverapipy"><a class="header" href="#api-endpoints-serverapipy">API Endpoints (<code>server/api.py</code>)</a></h1>
-<h2 id="openai-compatibility"><a class="header" href="#openai-compatibility">OpenAI Compatibility</a></h2>
-<p>Mini-YAIE strives to be drop-in compatible with OpenAI’s API format.</p>
-<h3 id="post-v1chatcompletions"><a class="header" href="#post-v1chatcompletions">POST <code>/v1/chat/completions</code></a></h3>
-<p><strong>Request Body</strong>:</p>
-<pre><code class="language-json">{
-  "model": "gpt2",
-  "messages": [{ "role": "user", "content": "Hello!" }],
-  "temperature": 0.7,
-  "max_tokens": 100
-}
+<h1 id="api--serving-openai-compatible-server"><a class="header" href="#api--serving-openai-compatible-server">API &amp; Serving: OpenAI-Compatible Server</a></h1>
+<h2 id="overview-5"><a class="header" href="#overview-5">Overview</a></h2>
+<p>The API server in Mini-YAIE implements an OpenAI-compatible interface, allowing the engine to be used with existing applications and tools designed for OpenAI’s API. The server uses FastAPI to provide RESTful endpoints with proper request/response handling, streaming support, and health monitoring.</p>
+<h2 id="api-design-philosophy"><a class="header" href="#api-design-philosophy">API Design Philosophy</a></h2>
+<p>The server follows OpenAI’s API specification to ensure compatibility with existing tools and applications while leveraging the advanced features of the SGLang-style inference engine. This approach allows users to:</p>
+<ul>
+<li>Use existing OpenAI clients without modification</li>
+<li>Take advantage of Mini-YAIE’s performance optimizations</li>
+<li>Integrate with tools built for OpenAI’s API format</li>
+<li>Maintain familiar request/response patterns</li>
+</ul>
+<h2 id="core-architecture"><a class="header" href="#core-architecture">Core Architecture</a></h2>
+<h3 id="fastapi-application"><a class="header" href="#fastapi-application">FastAPI Application</a></h3>
+<p>The server is built using FastAPI for high-performance web serving:</p>
+<pre><code class="language-python">def create_app(model_name: str) -&gt; FastAPI:
+    app = FastAPI(title="YAIE API", version="0.1.0")
+    engine = InferenceEngine(model_name)
+    return app
 </code></pre>
-<p><strong>Response</strong>:</p>
-<pre><code class="language-json">{
-  "id": "chat-123",
-  "object": "chat.completion",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "Hi there!"
-      },
-      "finish_reason": "stop"
+<h3 id="main-components"><a class="header" href="#main-components">Main Components</a></h3>
+<ol>
+<li><strong>Inference Engine Integration</strong>: Connects API endpoints to the core inference engine</li>
+<li><strong>Request Validation</strong>: Pydantic models for request/response validation</li>
+<li><strong>Streaming Support</strong>: Server-sent events for real-time token streaming</li>
+<li><strong>Error Handling</strong>: Proper HTTP error codes and message formatting</li>
+<li><strong>Health Monitoring</strong>: Endpoints for system status and availability</li>
+</ol>
+<h2 id="api-endpoints"><a class="header" href="#api-endpoints">API Endpoints</a></h2>
+<h3 id="1-chat-completions-endpoint"><a class="header" href="#1-chat-completions-endpoint">1. Chat Completions Endpoint</a></h3>
+<p>The main endpoint follows OpenAI’s <code>/v1/chat/completions</code> specification:</p>
+<pre><code class="language-python">@app.post("/v1/chat/completions")
+async def chat_completions(request: ChatCompletionRequest):
+    # Implementation handles both streaming and non-streaming responses
+</code></pre>
+<h4 id="request-schema"><a class="header" href="#request-schema">Request Schema</a></h4>
+<pre><code class="language-python">class ChatCompletionRequest(BaseModel):
+    model: str
+    messages: List[ChatMessage]
+    temperature: Optional[float] = 1.0
+    top_p: Optional[float] = 1.0
+    max_tokens: Optional[int] = None
+    stream: Optional[bool] = False
+</code></pre>
+<h4 id="response-schema"><a class="header" href="#response-schema">Response Schema</a></h4>
+<pre><code class="language-python">class ChatCompletionResponse(BaseModel):
+    id: str
+    object: str = "chat.completion"
+    created: int
+    model: str
+    choices: List[Choice]
+    usage: Dict[str, int]
+</code></pre>
+<h4 id="supported-parameters"><a class="header" href="#supported-parameters">Supported Parameters</a></h4>
+<ul>
+<li><strong>model</strong>: Model identifier (passed during server startup)</li>
+<li><strong>messages</strong>: List of message objects with role and content</li>
+<li><strong>temperature</strong>: Sampling temperature (0.0-2.0 recommended)</li>
+<li><strong>top_p</strong>: Nucleus sampling threshold (0.0-1.0)</li>
+<li><strong>max_tokens</strong>: Maximum tokens to generate</li>
+<li><strong>stream</strong>: Whether to stream responses (true/false)</li>
+</ul>
+<h3 id="2-model-listing-endpoint"><a class="header" href="#2-model-listing-endpoint">2. Model Listing Endpoint</a></h3>
+<p>Lists the available model:</p>
+<pre><code class="language-python">@app.get("/v1/models")
+async def list_models():
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": model_name,
+                "object": "model",
+                "owned_by": "user",
+                "created": int(time.time()),
+            }
+        ],
     }
-  ]
+</code></pre>
+<h3 id="3-health-check-endpoint"><a class="header" href="#3-health-check-endpoint">3. Health Check Endpoint</a></h3>
+<p>Simple health monitoring:</p>
+<pre><code class="language-python">@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "model": model_name}
+</code></pre>
+<h2 id="streaming-implementation"><a class="header" href="#streaming-implementation">Streaming Implementation</a></h2>
+<h3 id="streaming-vs-non-streaming"><a class="header" href="#streaming-vs-non-streaming">Streaming vs Non-Streaming</a></h3>
+<p>The server supports both response formats using the same endpoint:</p>
+<pre><code class="language-python">if request.stream:
+    # Return streaming response
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+else:
+    # Return non-streaming response
+    response = engine.chat_completion(messages_dicts, **kwargs)
+    return response
+</code></pre>
+<h3 id="streaming-response-format"><a class="header" href="#streaming-response-format">Streaming Response Format</a></h3>
+<p>The streaming implementation generates Server-Sent Events (SSE):</p>
+<pre><code class="language-python">def generate_stream():
+    for chunk in engine.chat_completion_stream(messages_dicts, **kwargs):
+        yield f"data: {json.dumps(chunk)}\n\n"
+    yield "data: [DONE]\n\n"
+</code></pre>
+<p>Each chunk follows OpenAI’s streaming format:</p>
+<pre><code class="language-json">{
+  "id": "chatcmpl-...",
+  "object": "chat.completion.chunk",
+  "created": 1234567890,
+  "model": "model-name",
+  "choices": [{
+    "index": 0,
+    "delta": {"content": "token"},
+    "finish_reason": null
+  }]
 }
 </code></pre>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="cli-usage"><a class="header" href="#cli-usage">CLI Usage</a></h1>
-<h2 id="starting-the-server"><a class="header" href="#starting-the-server">Starting the Server</a></h2>
-<pre><code class="language-bash">yaie serve --model gpt2 --port 8000
+<h2 id="integration-with-inference-engine"><a class="header" href="#integration-with-inference-engine">Integration with Inference Engine</a></h2>
+<h3 id="request-processing-flow-1"><a class="header" href="#request-processing-flow-1">Request Processing Flow</a></h3>
+<ol>
+<li><strong>API Request</strong>: Received through FastAPI endpoints</li>
+<li><strong>Validation</strong>: Pydantic models validate request format</li>
+<li><strong>Parameter Extraction</strong>: Convert API parameters to engine format</li>
+<li><strong>Engine Processing</strong>: Call appropriate engine methods</li>
+<li><strong>Response Formatting</strong>: Convert engine output to API format</li>
+<li><strong>API Response</strong>: Return properly formatted responses</li>
+</ol>
+<h3 id="parameter-mapping"><a class="header" href="#parameter-mapping">Parameter Mapping</a></h3>
+<p>API parameters are mapped to engine capabilities:</p>
+<pre><code class="language-python">kwargs = {}
+if request.max_tokens is not None:
+    kwargs["max_tokens"] = request.max_tokens
+if request.temperature is not None:
+    kwargs["temperature"] = request.temperature
+if request.top_p is not None:
+    kwargs["top_p"] = request.top_p
 </code></pre>
-<h2 id="interactive-chat"><a class="header" href="#interactive-chat">Interactive Chat</a></h2>
-<pre><code class="language-bash">yaie chat --model gpt2
+<h3 id="message-formatting"><a class="header" href="#message-formatting">Message Formatting</a></h3>
+<p>The server handles OpenAI-style messages by converting them to a format the engine understands:</p>
+<pre><code class="language-python">messages_dicts = [
+    {"role": msg.role, "content": msg.content}
+    for msg in request.messages
+]
+
+# Apply chat template if available
+if hasattr(self.tokenizer, 'apply_chat_template'):
+    formatted_prompt = self.tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True
+    )
+else:
+    # Fallback formatting
+    formatted_prompt = ""
+    for message in messages:
+        formatted_prompt += f"{message['role'].capitalize()}: {message['content']}\n"
+    formatted_prompt += "\nAssistant:"
 </code></pre>
-<h2 id="arguments"><a class="header" href="#arguments">Arguments</a></h2>
+<h2 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h2>
+<h3 id="http-error-codes"><a class="header" href="#http-error-codes">HTTP Error Codes</a></h3>
+<p>The server properly handles various error conditions:</p>
 <ul>
-<li><code>--model</code>: Name of the HuggingFace model or path to local model.</li>
-<li><code>--max-batch-size</code>: Limit the number of concurrent requests.</li>
-<li><code>--gpu-memory-utilization</code>: Fraction of GPU memory to use for KV cache (default 0.9).</li>
+<li><strong>400 Bad Request</strong>: Invalid request parameters</li>
+<li><strong>429 Too Many Requests</strong>: Rate limiting (not implemented in basic version)</li>
+<li><strong>500 Internal Server Error</strong>: Server-side errors during processing</li>
 </ul>
+<h3 id="error-response-format"><a class="header" href="#error-response-format">Error Response Format</a></h3>
+<p>Standard OpenAI-compatible error format:</p>
+<pre><code class="language-python">{
+  "error": {
+    "message": "Error description",
+    "type": "server_error",
+    "param": null,
+    "code": null
+  }
+}
+</code></pre>
+<h3 id="exception-handling"><a class="header" href="#exception-handling">Exception Handling</a></h3>
+<p>The server wraps all processing in try-catch blocks:</p>
+<pre><code class="language-python">try:
+    # Process request
+    response = engine.chat_completion(messages_dicts, **kwargs)
+    return response
+except Exception as e:
+    traceback.print_exc()
+    raise HTTPException(status_code=500, detail=str(e))
+</code></pre>
+<h2 id="performance-considerations-2"><a class="header" href="#performance-considerations-2">Performance Considerations</a></h2>
+<h3 id="request-batching"><a class="header" href="#request-batching">Request Batching</a></h3>
+<p>The API integrates with the engine’s batching system:</p>
+<ul>
+<li>Multiple API requests can be batched together in the engine</li>
+<li>Continuous batching maintains high throughput</li>
+<li>Batch size limited by engine configuration</li>
+</ul>
+<h3 id="memory-management-3"><a class="header" href="#memory-management-3">Memory Management</a></h3>
+<p>The server shares memory with the inference engine:</p>
+<ul>
+<li>KV-cache is shared across API requests</li>
+<li>Efficient memory reuse through paged cache system</li>
+<li>Memory limits enforced by engine configuration</li>
+</ul>
+<h3 id="concurrency"><a class="header" href="#concurrency">Concurrency</a></h3>
+<p>FastAPI provides automatic concurrency handling:</p>
+<ul>
+<li>Async request processing</li>
+<li>Connection pooling</li>
+<li>Efficient handling of multiple simultaneous requests</li>
+</ul>
+<h2 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h2>
+<h3 id="input-validation"><a class="header" href="#input-validation">Input Validation</a></h3>
+<ul>
+<li>Pydantic models validate all request parameters</li>
+<li>Type checking prevents injection attacks</li>
+<li>Length limits prevent excessive resource consumption</li>
+</ul>
+<h3 id="rate-limiting"><a class="header" href="#rate-limiting">Rate Limiting</a></h3>
+<p>While not implemented in the basic version, can be added:</p>
+<ul>
+<li>Per-IP rate limiting</li>
+<li>Request quota management</li>
+<li>Usage monitoring</li>
+</ul>
+<h2 id="deployment-configuration"><a class="header" href="#deployment-configuration">Deployment Configuration</a></h2>
+<h3 id="server-startup"><a class="header" href="#server-startup">Server Startup</a></h3>
+<p>The server can be started with a specific model:</p>
+<pre><code class="language-bash">uvicorn server.api:app --host 0.0.0.0 --port 8000
+</code></pre>
+<h3 id="environment-configuration"><a class="header" href="#environment-configuration">Environment Configuration</a></h3>
+<p>The server supports environment-based configuration:</p>
+<ul>
+<li>Model name via environment variables</li>
+<li>Port and host configuration</li>
+<li>Resource limits</li>
+</ul>
+<h2 id="sglang-style-features-integration"><a class="header" href="#sglang-style-features-integration">SGLang-Style Features Integration</a></h2>
+<h3 id="continuous-batching-1"><a class="header" href="#continuous-batching-1">Continuous Batching</a></h3>
+<p>The API benefits from the engine’s continuous batching:</p>
+<ul>
+<li>Requests are automatically batched</li>
+<li>High throughput maintained</li>
+<li>Low latency for individual requests</li>
+</ul>
+<h3 id="prefix-sharing"><a class="header" href="#prefix-sharing">Prefix Sharing</a></h3>
+<p>API requests with similar prefixes benefit from:</p>
+<ul>
+<li>Shared computation in radial attention</li>
+<li>Reduced memory usage</li>
+<li>Improved efficiency</li>
+</ul>
+<h3 id="multi-step-processing"><a class="header" href="#multi-step-processing">Multi-Step Processing</a></h3>
+<p>The API leverages the engine’s multi-step capabilities:</p>
+<ul>
+<li>Efficient prefill and decode phases</li>
+<li>Optimized request scheduling</li>
+<li>Memory-aware processing</li>
+</ul>
+<h2 id="usage-examples"><a class="header" href="#usage-examples">Usage Examples</a></h2>
+<h3 id="basic-chat-request"><a class="header" href="#basic-chat-request">Basic Chat Request</a></h3>
+<pre><code class="language-bash">curl -X POST "http://localhost:8000/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "model-name",
+    "messages": [
+      {"role": "user", "content": "Hello, how are you?"}
+    ],
+    "temperature": 0.7
+  }'
+</code></pre>
+<h3 id="streaming-request"><a class="header" href="#streaming-request">Streaming Request</a></h3>
+<pre><code class="language-bash">curl -X POST "http://localhost:8000/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "model-name",
+    "messages": [
+      {"role": "user", "content": "Write a short story"}
+    ],
+    "stream": true
+  }'
+</code></pre>
+<h3 id="programmatic-usage"><a class="header" href="#programmatic-usage">Programmatic Usage</a></h3>
+<pre><code class="language-python">import openai
+
+# Configure client to use local server
+client = openai.OpenAI(
+    base_url="http://localhost:8000/v1",
+    api_key="dummy"  # Required but ignored
+)
+
+# Use standard OpenAI SDK
+response = client.chat.completions.create(
+    model="model-name",
+    messages=[{"role": "user", "content": "Hello"}],
+    temperature=0.7
+)
+</code></pre>
+<h2 id="monitoring-and-logging"><a class="header" href="#monitoring-and-logging">Monitoring and Logging</a></h2>
+<h3 id="health-endpoints"><a class="header" href="#health-endpoints">Health Endpoints</a></h3>
+<p>The health endpoint can be used for monitoring:</p>
+<pre><code class="language-bash">curl http://localhost:8000/health
+</code></pre>
+<h3 id="performance-metrics"><a class="header" href="#performance-metrics">Performance Metrics</a></h3>
+<p>The server can be extended with:</p>
+<ul>
+<li>Response time tracking</li>
+<li>Request volume monitoring</li>
+<li>Error rate monitoring</li>
+<li>Resource utilization metrics</li>
+</ul>
+<h2 id="advanced-features-2"><a class="header" href="#advanced-features-2">Advanced Features</a></h2>
+<h3 id="model-loading-1"><a class="header" href="#model-loading-1">Model Loading</a></h3>
+<p>The server handles model loading automatically:</p>
+<ul>
+<li>Lazy loading when first accessed</li>
+<li>Caching for subsequent requests</li>
+<li>HuggingFace model integration</li>
+</ul>
+<h3 id="response-caching"><a class="header" href="#response-caching">Response Caching</a></h3>
+<p>The system supports response caching for:</p>
+<ul>
+<li>Repeated identical requests</li>
+<li>Common prompt patterns</li>
+<li>Improved response times for cached content</li>
+</ul>
+<h3 id="logging-and-debugging"><a class="header" href="#logging-and-debugging">Logging and Debugging</a></h3>
+<p>Comprehensive logging can be added:</p>
+<ul>
+<li>Request/response logging</li>
+<li>Performance metrics</li>
+<li>Error tracing</li>
+<li>Usage analytics</li>
+</ul>
+<p>This OpenAI-compatible API server enables Mini-YAIE to be integrated into existing ecosystems while providing the performance benefits of SGLang-style inference optimization.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="production-considerations"><a class="header" href="#production-considerations">Production Considerations</a></h1>
-<p>While Mini-YAIE is educational, here is what you would need for production:</p>
-<h2 id="1-batching--latency"><a class="header" href="#1-batching--latency">1. Batching &amp; Latency</a></h2>
+<h1 id="cli-usage-interactive-and-server-modes"><a class="header" href="#cli-usage-interactive-and-server-modes">CLI Usage: Interactive and Server Modes</a></h1>
+<h2 id="overview-6"><a class="header" href="#overview-6">Overview</a></h2>
+<p>Mini-YAIE provides a comprehensive command-line interface (CLI) that serves as the primary entry point for users. The CLI supports both interactive chat mode and server mode, making it suitable for both direct interaction and production deployment scenarios.</p>
+<h2 id="cli-architecture"><a class="header" href="#cli-architecture">CLI Architecture</a></h2>
+<h3 id="entry-point-structure"><a class="header" href="#entry-point-structure">Entry Point Structure</a></h3>
+<p>The CLI is organized around different command verbs:</p>
+<pre><code>yaie &lt;command&gt; [options] [arguments]
+
+Commands:
+- serve: Start an OpenAI-compatible API server
+- chat: Start an interactive chat session
+</code></pre>
+<h3 id="core-components-3"><a class="header" href="#core-components-3">Core Components</a></h3>
+<ol>
+<li><strong>Argument Parsing</strong>: Uses argparse for command-line option handling</li>
+<li><strong>Model Integration</strong>: Connects CLI commands to the inference engine</li>
+<li><strong>Interactive Interface</strong>: Provides user-friendly chat experience</li>
+<li><strong>Server Integration</strong>: Launches API server with proper configuration</li>
+</ol>
+<h2 id="server-mode"><a class="header" href="#server-mode">Server Mode</a></h2>
+<h3 id="basic-server-usage"><a class="header" href="#basic-server-usage">Basic Server Usage</a></h3>
+<p>Start the API server with a specific model:</p>
+<pre><code class="language-bash">yaie serve microsoft/DialoGPT-medium --host localhost --port 8000
+</code></pre>
+<h3 id="server-options"><a class="header" href="#server-options">Server Options</a></h3>
+<h4 id="model-selection-1"><a class="header" href="#model-selection-1">Model Selection</a></h4>
+<pre><code class="language-bash">--model MODEL_NAME          # Specify the model to use (required)
+</code></pre>
+<h4 id="network-configuration"><a class="header" href="#network-configuration">Network Configuration</a></h4>
+<pre><code class="language-bash">--host HOST                 # Server host (default: localhost)
+--port PORT                 # Server port (default: 8000)
+--workers WORKERS           # Number of server workers
+</code></pre>
+<h4 id="performance-options"><a class="header" href="#performance-options">Performance Options</a></h4>
+<pre><code class="language-bash">--max-batch-size N          # Maximum batch size
+--max-prefill-batch-size N  # Maximum prefill batch size
+--max-decode-batch-size N   # Maximum decode batch size
+--num-blocks N              # Number of KV-cache blocks
+--block-size N              # Size of each cache block
+</code></pre>
+<h3 id="server-startup-process"><a class="header" href="#server-startup-process">Server Startup Process</a></h3>
+<ol>
+<li><strong>Model Loading</strong>: Download and load model from HuggingFace if not cached</li>
+<li><strong>Engine Initialization</strong>: Create inference engine with specified parameters</li>
+<li><strong>API Server Creation</strong>: Initialize FastAPI application with engine</li>
+<li><strong>Server Launch</strong>: Start the web server on specified host/port</li>
+</ol>
+<h3 id="example-server-commands"><a class="header" href="#example-server-commands">Example Server Commands</a></h3>
+<h4 id="basic-server"><a class="header" href="#basic-server">Basic Server</a></h4>
+<pre><code class="language-bash">yaie serve microsoft/DialoGPT-medium
+</code></pre>
+<h4 id="production-server"><a class="header" href="#production-server">Production Server</a></h4>
+<pre><code class="language-bash">yaie serve microsoft/DialoGPT-medium --host 0.0.0.0 --port 8000 --max-batch-size 16
+</code></pre>
+<h4 id="resource-constrained-server"><a class="header" href="#resource-constrained-server">Resource-Constrained Server</a></h4>
+<pre><code class="language-bash">yaie serve microsoft/DialoGPT-medium --num-blocks 1000 --max-batch-size 4
+</code></pre>
+<h2 id="chat-mode"><a class="header" href="#chat-mode">Chat Mode</a></h2>
+<h3 id="basic-chat-usage"><a class="header" href="#basic-chat-usage">Basic Chat Usage</a></h3>
+<p>Start an interactive chat session:</p>
+<pre><code class="language-bash">yaie chat microsoft/DialoGPT-medium
+</code></pre>
+<h3 id="chat-options"><a class="header" href="#chat-options">Chat Options</a></h3>
+<h4 id="generation-parameters"><a class="header" href="#generation-parameters">Generation Parameters</a></h4>
+<pre><code class="language-bash">--temperature TEMP          # Sampling temperature (default: 1.0)
+--top-p TOP_P               # Nucleus sampling threshold (default: 1.0)
+--max-tokens N              # Maximum tokens to generate (default: 512)
+--stream                    # Stream responses in real-time (default: true)
+</code></pre>
+<h4 id="model-configuration-1"><a class="header" href="#model-configuration-1">Model Configuration</a></h4>
+<pre><code class="language-bash">--model MODEL_NAME          # Specify the model to use (required)
+</code></pre>
+<h3 id="interactive-chat-experience"><a class="header" href="#interactive-chat-experience">Interactive Chat Experience</a></h3>
+<h4 id="session-flow"><a class="header" href="#session-flow">Session Flow</a></h4>
+<ol>
+<li><strong>Model Loading</strong>: Model is loaded if not cached</li>
+<li><strong>Chat Initialization</strong>: Engine and tokenizer are set up</li>
+<li><strong>Conversation Loop</strong>: User inputs are processed and responses generated</li>
+<li><strong>Session Termination</strong>: Exit with Ctrl+C or quit command</li>
+</ol>
+<h4 id="user-interaction"><a class="header" href="#user-interaction">User Interaction</a></h4>
+<p>The chat interface provides a conversational experience:</p>
+<pre><code>$ yaie chat microsoft/DialoGPT-medium
+Model loaded successfully!
+Starting chat session (press Ctrl+C to exit)...
+
+User: Hello, how are you?
+AI: I'm doing well, thank you for asking!
+
+User: What can you help me with?
+AI: I can have conversations, answer questions, and assist with various tasks.
+</code></pre>
+<h3 id="example-chat-commands"><a class="header" href="#example-chat-commands">Example Chat Commands</a></h3>
+<h4 id="basic-chat"><a class="header" href="#basic-chat">Basic Chat</a></h4>
+<pre><code class="language-bash">yaie chat microsoft/DialoGPT-medium
+</code></pre>
+<h4 id="creative-chat"><a class="header" href="#creative-chat">Creative Chat</a></h4>
+<pre><code class="language-bash">yaie chat microsoft/DialoGPT-medium --temperature 1.2 --top-p 0.9
+</code></pre>
+<h4 id="focused-chat"><a class="header" href="#focused-chat">Focused Chat</a></h4>
+<pre><code class="language-bash">yaie chat microsoft/DialoGPT-medium --temperature 0.7 --max-tokens 128
+</code></pre>
+<h2 id="model-selection-1-1"><a class="header" href="#model-selection-1-1">Model Selection</a></h2>
+<h3 id="supported-model-formats"><a class="header" href="#supported-model-formats">Supported Model Formats</a></h3>
+<p>The CLI supports any HuggingFace-compatible model:</p>
+<h4 id="pre-trained-models"><a class="header" href="#pre-trained-models">Pre-trained Models</a></h4>
+<pre><code class="language-bash">yaie serve microsoft/DialoGPT-medium
+yaie serve gpt2
+yaie serve facebook/opt-1.3b
+</code></pre>
+<h4 id="local-models-1"><a class="header" href="#local-models-1">Local Models</a></h4>
+<pre><code class="language-bash">yaie serve /path/to/local/model
+yaie serve ./models/my-custom-model
+</code></pre>
+<h3 id="model-caching"><a class="header" href="#model-caching">Model Caching</a></h3>
+<p>Models are automatically downloaded and cached:</p>
 <ul>
-<li><strong>Timeouts</strong>: Requests waiting too long in the queue should be handled.</li>
-<li><strong>Preemption</strong>: If high-priority requests come in, lower priority ones should be paused (swapped to CPU).</li>
+<li>First run: Download from HuggingFace Hub</li>
+<li>Subsequent runs: Use cached version</li>
+<li>Cache location: Standard HuggingFace cache directory</li>
 </ul>
+<h2 id="performance-tuning-1"><a class="header" href="#performance-tuning-1">Performance Tuning</a></h2>
+<h3 id="memory-configuration"><a class="header" href="#memory-configuration">Memory Configuration</a></h3>
+<p>Adjust memory settings based on available GPU memory:</p>
+<pre><code class="language-bash"># For 24GB+ GPU
+yaie serve model --num-blocks 4000 --max-batch-size 32
+
+# For 8-16GB GPU  
+yaie serve model --num-blocks 1500 --max-batch-size 8
+
+# For 4-8GB GPU
+yaie serve model --num-blocks 800 --max-batch-size 4
+</code></pre>
+<h3 id="batch-size-optimization-1"><a class="header" href="#batch-size-optimization-1">Batch Size Optimization</a></h3>
+<p>Tune batch sizes for optimal throughput:</p>
+<pre><code class="language-bash"># High throughput (more memory)
+yaie serve model --max-batch-size 32 --max-prefill-batch-size 64
+
+# Memory efficient (lower batch sizes)
+yaie serve model --max-batch-size 4 --max-prefill-batch-size 8
+</code></pre>
+<h2 id="error-handling-and-troubleshooting"><a class="header" href="#error-handling-and-troubleshooting">Error Handling and Troubleshooting</a></h2>
+<h3 id="common-errors"><a class="header" href="#common-errors">Common Errors</a></h3>
+<h4 id="model-loading-errors"><a class="header" href="#model-loading-errors">Model Loading Errors</a></h4>
+<pre><code class="language-bash"># If model name is invalid
+Error: Model not found on HuggingFace Hub
+
+# If network is unavailable during first load
+Error: Failed to download model
+</code></pre>
+<h4 id="memory-errors"><a class="header" href="#memory-errors">Memory Errors</a></h4>
+<pre><code class="language-bash"># If not enough GPU memory
+CUDA out of memory error
+
+# If KV-cache is too large
+Memory allocation failed
+</code></pre>
+<h3 id="debugging-options"><a class="header" href="#debugging-options">Debugging Options</a></h3>
+<h4 id="verbose-output"><a class="header" href="#verbose-output">Verbose Output</a></h4>
+<pre><code class="language-bash">yaie serve model --verbose  # Show detailed startup information
+</code></pre>
+<h4 id="configuration-validation-1"><a class="header" href="#configuration-validation-1">Configuration Validation</a></h4>
+<pre><code class="language-bash">yaie serve model --debug    # Enable debugging features
+</code></pre>
+<h2 id="advanced-cli-features"><a class="header" href="#advanced-cli-features">Advanced CLI Features</a></h2>
+<h3 id="configuration-files"><a class="header" href="#configuration-files">Configuration Files</a></h3>
+<p>The CLI supports configuration files for complex setups:</p>
+<pre><code class="language-bash">yaie serve --config config.yaml model
+</code></pre>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<p>Several environment variables can customize behavior:</p>
+<pre><code class="language-bash"># Set default host
+export YAIE_HOST=0.0.0.0
+
+# Set default port  
+export YAIE_PORT=9000
+
+# Set memory limits
+export YAIE_MAX_BLOCKS=2000
+</code></pre>
+<h3 id="logging-configuration"><a class="header" href="#logging-configuration">Logging Configuration</a></h3>
+<p>Control logging verbosity and output:</p>
+<pre><code class="language-bash"># Enable detailed logging
+yaie serve model --log-level DEBUG
+
+# Log to file
+yaie serve model --log-file server.log
+</code></pre>
+<h2 id="integration-with-sglang-features-1"><a class="header" href="#integration-with-sglang-features-1">Integration with SGLang Features</a></h2>
+<h3 id="batching-optimization"><a class="header" href="#batching-optimization">Batching Optimization</a></h3>
+<p>The CLI exposes SGLang batching parameters:</p>
+<pre><code class="language-bash">yaie serve model \
+  --max-prefill-batch-size 16 \
+  --max-decode-batch-size 256
+</code></pre>
+<h3 id="prefix-sharing-control"><a class="header" href="#prefix-sharing-control">Prefix Sharing Control</a></h3>
+<p>Parameters that affect prefix sharing efficiency:</p>
+<pre><code class="language-bash">yaie serve model \
+  --max-seq-len 2048 \
+  --block-size 16
+</code></pre>
+<h2 id="production-deployment"><a class="header" href="#production-deployment">Production Deployment</a></h2>
+<h3 id="server-management"><a class="header" href="#server-management">Server Management</a></h3>
+<h4 id="process-control"><a class="header" href="#process-control">Process Control</a></h4>
+<pre><code class="language-bash"># Start server in background
+nohup yaie serve model &gt; server.log 2&gt;&amp;1 &amp;
+
+# Kill server process
+pkill -f "yaie serve"
+</code></pre>
+<h4 id="process-monitoring"><a class="header" href="#process-monitoring">Process Monitoring</a></h4>
+<pre><code class="language-bash"># Monitor server with systemd
+systemctl start yaie-server
+
+# Monitor with supervisor
+supervisorctl start yaie-server
+</code></pre>
+<h3 id="health-checks"><a class="header" href="#health-checks">Health Checks</a></h3>
+<p>The server provides health status:</p>
+<pre><code class="language-bash"># Check server status
+curl http://localhost:8000/health
+
+# Integrate with monitoring tools
+# Health check interval and thresholds
+</code></pre>
+<h2 id="examples-and-use-cases"><a class="header" href="#examples-and-use-cases">Examples and Use Cases</a></h2>
+<h3 id="development-usage"><a class="header" href="#development-usage">Development Usage</a></h3>
+<pre><code class="language-bash"># Quick test with small model
+yaie chat gpt2
+
+# Interactive development with verbose output
+yaie serve gpt2 --port 8000 --verbose
+</code></pre>
+<h3 id="production-usage"><a class="header" href="#production-usage">Production Usage</a></h3>
+<pre><code class="language-bash"># High-performance server for production
+yaie serve microsoft/DialoGPT-medium \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --max-batch-size 16 \
+  --num-blocks 2000
+
+# Low-resource server for edge deployment
+yaie serve gpt2 \
+  --max-batch-size 2 \
+  --num-blocks 500
+</code></pre>
+<h3 id="testing-and-evaluation"><a class="header" href="#testing-and-evaluation">Testing and Evaluation</a></h3>
+<pre><code class="language-bash"># Test with various parameters
+yaie chat model --temperature 0.5 --top-p 0.9
+
+# Evaluate different models
+yaie serve model1 --port 8001 &amp;
+yaie serve model2 --port 8002 &amp;
+</code></pre>
+<p>The CLI provides a comprehensive interface to access all of Mini-YAIE’s features, from simple interactive chat to high-performance API serving with SGLang-style optimizations.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="production-deployment-1"><a class="header" href="#production-deployment-1">Production Deployment</a></h1>
+<p>While Mini-YAIE is primarily educational, understanding production considerations helps bridge the gap between learning and real-world deployment.</p>
+<h2 id="deployment-architecture"><a class="header" href="#deployment-architecture">Deployment Architecture</a></h2>
+<pre><code class="language-mermaid">graph TD
+    LoadBalancer --&gt;|HTTP| API1
+    LoadBalancer --&gt;|HTTP| API2
+    LoadBalancer --&gt;|HTTP| API3
+    API1 --&gt;|gRPC| Inference1
+    API2 --&gt;|gRPC| Inference2
+    API3 --&gt;|gRPC| Inference3
+    Inference1 --&gt;|GPU| Model1
+    Inference2 --&gt;|GPU| Model2
+    Inference3 --&gt;|GPU| Model3
+</code></pre>
+<h2 id="1-performance-optimization"><a class="header" href="#1-performance-optimization">1. Performance Optimization</a></h2>
+<h3 id="batching--latency-management"><a class="header" href="#batching--latency-management">Batching &amp; Latency Management</a></h3>
+<ul>
+<li><strong>Request Timeouts</strong>: Implement configurable timeouts for requests waiting in queue</li>
+<li><strong>Priority Queues</strong>: Support different priority levels for requests</li>
+<li><strong>Preemption</strong>: Pause low-priority requests and swap their KV-cache to CPU when high-priority requests arrive</li>
+<li><strong>Adaptive Batching</strong>: Dynamically adjust batch sizes based on current load and latency requirements</li>
+</ul>
+<h3 id="continuous-batching-strategies"><a class="header" href="#continuous-batching-strategies">Continuous Batching Strategies</a></h3>
+<pre><code class="language-python"># Advanced scheduling policies
+class SchedulingPolicy(Enum):
+    FCFS = "fcfs"  # First-come-first-served
+    PRIORITY = "priority"  # Priority-based
+    FAIR = "fair"  # Fair sharing
+    LATENCY_OPTIMIZED = "latency"  # Minimize latency
+</code></pre>
 <h2 id="2-distributed-inference"><a class="header" href="#2-distributed-inference">2. Distributed Inference</a></h2>
+<h3 id="tensor-parallelism"><a class="header" href="#tensor-parallelism">Tensor Parallelism</a></h3>
+<pre><code class="language-python"># Split model weights across multiple GPUs
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    device_map={
+        "layer.0": "cuda:0",
+        "layer.1": "cuda:1",
+        "layer.2": "cuda:2",
+        "layer.3": "cuda:3"
+    }
+)
+</code></pre>
+<h3 id="pipeline-parallelism"><a class="header" href="#pipeline-parallelism">Pipeline Parallelism</a></h3>
+<pre><code class="language-python"># Split layers across different stages
+# Stage 1: Layers 0-10 on GPU 0
+# Stage 2: Layers 11-20 on GPU 1
+# Stage 3: Layers 21-30 on GPU 2
+</code></pre>
+<h3 id="model-parallelism"><a class="header" href="#model-parallelism">Model Parallelism</a></h3>
 <ul>
-<li><strong>Tensor Parallelism</strong>: Splitting the model weights across multiple GPUs (Megatron-LM style).</li>
-<li><strong>Pipeline Parallelism</strong>: Splitting layers across GPUs.</li>
+<li><strong>Expert Parallelism</strong>: For mixture-of-experts models</li>
+<li><strong>Sequence Parallelism</strong>: For very long sequences</li>
+<li><strong>Hybrid Parallelism</strong>: Combining multiple strategies</li>
 </ul>
-<h2 id="3-quantization"><a class="header" href="#3-quantization">3. Quantization</a></h2>
+<h2 id="3-memory-optimization"><a class="header" href="#3-memory-optimization">3. Memory Optimization</a></h2>
+<h3 id="quantization"><a class="header" href="#quantization">Quantization</a></h3>
+<pre><code class="language-python"># Load model with quantization
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    load_in_8bit=True,  # 8-bit quantization
+    device_map="auto"
+)
+
+# Or use 4-bit quantization
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    load_in_4bit=True,
+    device_map="auto"
+)
+</code></pre>
+<h3 id="memory-management-strategies"><a class="header" href="#memory-management-strategies">Memory Management Strategies</a></h3>
 <ul>
-<li><strong>FP8 / INT8</strong>: Running with lower precision to save memory and increase compute speed (using library like <code>bitsandbytes</code>).</li>
+<li><strong>Paged Attention</strong>: Efficient memory management for KV-cache</li>
+<li><strong>Memory Pooling</strong>: Reuse memory blocks across requests</li>
+<li><strong>Swapping</strong>: Move inactive KV-cache blocks to CPU memory</li>
+<li><strong>Compression</strong>: Compress KV-cache values with minimal quality loss</li>
 </ul>
+<h2 id="4-scalability--reliability"><a class="header" href="#4-scalability--reliability">4. Scalability &amp; Reliability</a></h2>
+<h3 id="horizontal-scaling"><a class="header" href="#horizontal-scaling">Horizontal Scaling</a></h3>
+<pre><code class="language-python"># Multiple inference workers behind load balancer
+workers = [
+    InferenceWorker(model_name, gpu_id=0),
+    InferenceWorker(model_name, gpu_id=1),
+    InferenceWorker(model_name, gpu_id=2),
+    InferenceWorker(model_name, gpu_id=3)
+]
+</code></pre>
+<h3 id="load-balancing"><a class="header" href="#load-balancing">Load Balancing</a></h3>
+<ul>
+<li><strong>Round Robin</strong>: Simple distribution across workers</li>
+<li><strong>Least Connections</strong>: Send to least busy worker</li>
+<li><strong>Latency-based</strong>: Send to worker with lowest current latency</li>
+<li><strong>Content-based</strong>: Route based on request characteristics</li>
+</ul>
+<h3 id="health-monitoring"><a class="header" href="#health-monitoring">Health Monitoring</a></h3>
+<pre><code class="language-python"># Health check endpoints
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "gpu_memory": get_gpu_memory_usage(),
+        "active_requests": scheduler.get_active_request_count(),
+        "queue_length": scheduler.get_queue_status()
+    }
+</code></pre>
+<h2 id="5-observability"><a class="header" href="#5-observability">5. Observability</a></h2>
+<h3 id="metrics-collection"><a class="header" href="#metrics-collection">Metrics Collection</a></h3>
+<pre><code class="language-python"># Prometheus metrics
+REQUEST_LATENCY = Histogram(
+    'request_latency_seconds',
+    'Request latency in seconds',
+    buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0]
+)
+
+TOKENS_PER_SECOND = Counter(
+    'tokens_per_second',
+    'Tokens generated per second'
+)
+</code></pre>
+<h3 id="logging"><a class="header" href="#logging">Logging</a></h3>
+<pre><code class="language-python"># Structured logging
+logger.info(
+    "Request completed",
+    request_id=request.id,
+    latency=latency_seconds,
+    tokens_generated=token_count,
+    model=model_name
+)
+</code></pre>
+<h3 id="tracing"><a class="header" href="#tracing">Tracing</a></h3>
+<pre><code class="language-python"># Distributed tracing
+with tracer.start_span("generate_response") as span:
+    span.set_attribute("model", model_name)
+    span.set_attribute("request_id", request.id)
+    response = engine.generate(prompt)
+</code></pre>
+<h2 id="6-security"><a class="header" href="#6-security">6. Security</a></h2>
+<h3 id="authentication"><a class="header" href="#authentication">Authentication</a></h3>
+<pre><code class="language-python"># API key authentication
+@app.post("/v1/chat/completions")
+async def chat_completions(
+    request: ChatCompletionRequest,
+    api_key: str = Header(None)
+):
+    if not validate_api_key(api_key):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+</code></pre>
+<h3 id="rate-limiting-1"><a class="header" href="#rate-limiting-1">Rate Limiting</a></h3>
+<pre><code class="language-python"># Rate limiting per API key
+limiter = RateLimiter(
+    requests_per_minute=1000,
+    burst_capacity=100
+)
+
+@app.post("/v1/chat/completions")
+@limiter.limit("1000/minute")
+async def chat_completions(request: ChatCompletionRequest):
+    # Process request
+</code></pre>
+<h3 id="input-validation-1"><a class="header" href="#input-validation-1">Input Validation</a></h3>
+<pre><code class="language-python"># Validate and sanitize inputs
+@app.post("/v1/chat/completions")
+async def chat_completions(request: ChatCompletionRequest):
+    # Validate prompt length
+    if len(request.prompt) &gt; MAX_PROMPT_LENGTH:
+        raise HTTPException(status_code=400, detail="Prompt too long")
+    
+    # Sanitize inputs
+    sanitized_prompt = sanitize_input(request.prompt)
+</code></pre>
+<h2 id="7-configuration-management"><a class="header" href="#7-configuration-management">7. Configuration Management</a></h2>
+<h3 id="environment-variables-1"><a class="header" href="#environment-variables-1">Environment Variables</a></h3>
+<pre><code class="language-bash"># Configure through environment variables
+export MODEL_NAME="gpt2"
+export MAX_BATCH_SIZE="16"
+export GPU_MEMORY_UTIL="0.9"
+export ENABLE_RADIX_CACHE="true"
+</code></pre>
+<h3 id="configuration-files-1"><a class="header" href="#configuration-files-1">Configuration Files</a></h3>
+<pre><code class="language-yaml"># YAML configuration
+model:
+  name: "gpt2"
+  dtype: "float16"
+  tensor_parallel_size: 1
+
+scheduler:
+  max_batch_size: 16
+  max_prefill_batch_size: 32
+  max_decode_batch_size: 256
+
+memory:
+  gpu_blocks: 2000
+  cpu_blocks: 1000
+  block_size: 16
+</code></pre>
+<h2 id="8-deployment-strategies"><a class="header" href="#8-deployment-strategies">8. Deployment Strategies</a></h2>
+<h3 id="containerization"><a class="header" href="#containerization">Containerization</a></h3>
+<pre><code class="language-dockerfile"># Dockerfile for Mini-YAIE
+FROM python:3.9-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+RUN pip install -e .
+
+CMD ["yaie", "serve", "gpt2", "--host", "0.0.0.0", "--port", "8000"]
+</code></pre>
+<h3 id="kubernetes-deployment"><a class="header" href="#kubernetes-deployment">Kubernetes Deployment</a></h3>
+<pre><code class="language-yaml"># Kubernetes deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yaie-inference
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: yaie-inference
+  template:
+    metadata:
+      labels:
+        app: yaie-inference
+    spec:
+      containers:
+      - name: yaie
+        image: yaie:latest
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+</code></pre>
+<h2 id="9-performance-monitoring"><a class="header" href="#9-performance-monitoring">9. Performance Monitoring</a></h2>
+<h3 id="key-metrics-to-track"><a class="header" href="#key-metrics-to-track">Key Metrics to Track</a></h3>
+<ul>
+<li><strong>Latency</strong>: Time from request to first token (TTFT) and time per token</li>
+<li><strong>Throughput</strong>: Tokens generated per second</li>
+<li><strong>GPU Utilization</strong>: Percentage of GPU time spent on computation</li>
+<li><strong>Memory Usage</strong>: GPU and CPU memory consumption</li>
+<li><strong>Queue Length</strong>: Number of requests waiting</li>
+<li><strong>Error Rates</strong>: Percentage of failed requests</li>
+</ul>
+<h3 id="alerting"><a class="header" href="#alerting">Alerting</a></h3>
+<pre><code class="language-python"># Set up alerts for critical conditions
+if gpu_memory_usage &gt; 0.95:
+    alert("High GPU memory usage")
+
+if request_latency &gt; 5.0:  # 5 seconds
+    alert("High request latency")
+
+if error_rate &gt; 0.01:  # 1%
+    alert("High error rate")
+</code></pre>
+<h2 id="10-cost-optimization"><a class="header" href="#10-cost-optimization">10. Cost Optimization</a></h2>
+<h3 id="resource-management"><a class="header" href="#resource-management">Resource Management</a></h3>
+<ul>
+<li><strong>Auto-scaling</strong>: Scale workers based on demand</li>
+<li><strong>Spot Instances</strong>: Use cheaper spot instances for non-critical workloads</li>
+<li><strong>Right-sizing</strong>: Choose appropriate instance types for workload</li>
+<li><strong>Batch Processing</strong>: Process offline requests in batches during low-traffic periods</li>
+</ul>
+<h3 id="model-selection-2"><a class="header" href="#model-selection-2">Model Selection</a></h3>
+<pre><code class="language-python"># Choose appropriate model size for use case
+small_models = ["gpt2", "DialoGPT-small"]  # Fast, low cost
+medium_models = ["gpt2-medium", "DialoGPT-medium"]  # Balanced
+large_models = ["gpt2-large", "DialoGPT-large"]  # High quality, expensive
+</code></pre>
+<h2 id="educational-focus-1"><a class="header" href="#educational-focus-1">Educational Focus</a></h2>
+<p>Understanding production considerations helps you:</p>
+<ol>
+<li><strong>Bridge the gap</strong> between educational implementations and real-world systems</li>
+<li><strong>Appreciate the complexity</strong> of production-grade inference engines</li>
+<li><strong>Make informed decisions</strong> about trade-offs in your implementations</li>
+<li><strong>Design for scalability</strong> from the beginning</li>
+</ol>
+<h2 id="from-mini-yaie-to-production"><a class="header" href="#from-mini-yaie-to-production">From Mini-YAIE to Production</a></h2>
+<p>Mini-YAIE provides the foundation for understanding key concepts:</p>
+<ul>
+<li><strong>Continuous Batching</strong>: The core of efficient inference</li>
+<li><strong>Memory Management</strong>: Critical for handling multiple requests</li>
+<li><strong>Prefix Sharing</strong>: Advanced optimization for similar requests</li>
+<li><strong>API Design</strong>: Standard interfaces for integration</li>
+</ul>
+<p>Production systems build on these foundations with:</p>
+<ul>
+<li><strong>Scalability</strong>: Handling thousands of concurrent requests</li>
+<li><strong>Reliability</strong>: High availability and fault tolerance</li>
+<li><strong>Observability</strong>: Comprehensive monitoring and logging</li>
+<li><strong>Security</strong>: Authentication, authorization, and input validation</li>
+</ul>
+<p>By mastering the concepts in Mini-YAIE, you’ll be well-prepared to understand and contribute to production-grade inference systems like vLLM, SGLang, and TensorRT-LLM.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="references"><a class="header" href="#references">References</a></h1>
 <ol>
@@ -1113,7 +3052,7 @@ $Q \cdot K^T$, Softmax, $\cdot V$.</p>
 <li><strong>FlashAttention</strong>: Fast and Memory-Efficient Exact Attention with IO-Awareness. <a href="https://github.com/Dao-AILab/flash-attention">Link</a></li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h1>
+<h1 id="troubleshooting-1"><a class="header" href="#troubleshooting-1">Troubleshooting</a></h1>
 <h2 id="cuda-kernel-not-found"><a class="header" href="#cuda-kernel-not-found">“CUDA kernel not found”</a></h2>
 <ul>
 <li>Ensure you ran <code>pip install -e .</code>.</li>

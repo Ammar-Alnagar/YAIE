@@ -54,10 +54,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b58c91dd.js";
+            window.path_to_searchindex_js = "../searchindex-d63bbf73.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-676105c4.js"></script>
+        <script src="../toc-44f1b166.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,19 +196,261 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="cli-usage"><a class="header" href="#cli-usage">CLI Usage</a></h1>
-<h2 id="starting-the-server"><a class="header" href="#starting-the-server">Starting the Server</a></h2>
-<pre><code class="language-bash">yaie serve --model gpt2 --port 8000
+                        <h1 id="cli-usage-interactive-and-server-modes"><a class="header" href="#cli-usage-interactive-and-server-modes">CLI Usage: Interactive and Server Modes</a></h1>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Mini-YAIE provides a comprehensive command-line interface (CLI) that serves as the primary entry point for users. The CLI supports both interactive chat mode and server mode, making it suitable for both direct interaction and production deployment scenarios.</p>
+<h2 id="cli-architecture"><a class="header" href="#cli-architecture">CLI Architecture</a></h2>
+<h3 id="entry-point-structure"><a class="header" href="#entry-point-structure">Entry Point Structure</a></h3>
+<p>The CLI is organized around different command verbs:</p>
+<pre><code>yaie &lt;command&gt; [options] [arguments]
+
+Commands:
+- serve: Start an OpenAI-compatible API server
+- chat: Start an interactive chat session
 </code></pre>
-<h2 id="interactive-chat"><a class="header" href="#interactive-chat">Interactive Chat</a></h2>
-<pre><code class="language-bash">yaie chat --model gpt2
+<h3 id="core-components"><a class="header" href="#core-components">Core Components</a></h3>
+<ol>
+<li><strong>Argument Parsing</strong>: Uses argparse for command-line option handling</li>
+<li><strong>Model Integration</strong>: Connects CLI commands to the inference engine</li>
+<li><strong>Interactive Interface</strong>: Provides user-friendly chat experience</li>
+<li><strong>Server Integration</strong>: Launches API server with proper configuration</li>
+</ol>
+<h2 id="server-mode"><a class="header" href="#server-mode">Server Mode</a></h2>
+<h3 id="basic-server-usage"><a class="header" href="#basic-server-usage">Basic Server Usage</a></h3>
+<p>Start the API server with a specific model:</p>
+<pre><code class="language-bash">yaie serve microsoft/DialoGPT-medium --host localhost --port 8000
 </code></pre>
-<h2 id="arguments"><a class="header" href="#arguments">Arguments</a></h2>
+<h3 id="server-options"><a class="header" href="#server-options">Server Options</a></h3>
+<h4 id="model-selection"><a class="header" href="#model-selection">Model Selection</a></h4>
+<pre><code class="language-bash">--model MODEL_NAME          # Specify the model to use (required)
+</code></pre>
+<h4 id="network-configuration"><a class="header" href="#network-configuration">Network Configuration</a></h4>
+<pre><code class="language-bash">--host HOST                 # Server host (default: localhost)
+--port PORT                 # Server port (default: 8000)
+--workers WORKERS           # Number of server workers
+</code></pre>
+<h4 id="performance-options"><a class="header" href="#performance-options">Performance Options</a></h4>
+<pre><code class="language-bash">--max-batch-size N          # Maximum batch size
+--max-prefill-batch-size N  # Maximum prefill batch size
+--max-decode-batch-size N   # Maximum decode batch size
+--num-blocks N              # Number of KV-cache blocks
+--block-size N              # Size of each cache block
+</code></pre>
+<h3 id="server-startup-process"><a class="header" href="#server-startup-process">Server Startup Process</a></h3>
+<ol>
+<li><strong>Model Loading</strong>: Download and load model from HuggingFace if not cached</li>
+<li><strong>Engine Initialization</strong>: Create inference engine with specified parameters</li>
+<li><strong>API Server Creation</strong>: Initialize FastAPI application with engine</li>
+<li><strong>Server Launch</strong>: Start the web server on specified host/port</li>
+</ol>
+<h3 id="example-server-commands"><a class="header" href="#example-server-commands">Example Server Commands</a></h3>
+<h4 id="basic-server"><a class="header" href="#basic-server">Basic Server</a></h4>
+<pre><code class="language-bash">yaie serve microsoft/DialoGPT-medium
+</code></pre>
+<h4 id="production-server"><a class="header" href="#production-server">Production Server</a></h4>
+<pre><code class="language-bash">yaie serve microsoft/DialoGPT-medium --host 0.0.0.0 --port 8000 --max-batch-size 16
+</code></pre>
+<h4 id="resource-constrained-server"><a class="header" href="#resource-constrained-server">Resource-Constrained Server</a></h4>
+<pre><code class="language-bash">yaie serve microsoft/DialoGPT-medium --num-blocks 1000 --max-batch-size 4
+</code></pre>
+<h2 id="chat-mode"><a class="header" href="#chat-mode">Chat Mode</a></h2>
+<h3 id="basic-chat-usage"><a class="header" href="#basic-chat-usage">Basic Chat Usage</a></h3>
+<p>Start an interactive chat session:</p>
+<pre><code class="language-bash">yaie chat microsoft/DialoGPT-medium
+</code></pre>
+<h3 id="chat-options"><a class="header" href="#chat-options">Chat Options</a></h3>
+<h4 id="generation-parameters"><a class="header" href="#generation-parameters">Generation Parameters</a></h4>
+<pre><code class="language-bash">--temperature TEMP          # Sampling temperature (default: 1.0)
+--top-p TOP_P               # Nucleus sampling threshold (default: 1.0)
+--max-tokens N              # Maximum tokens to generate (default: 512)
+--stream                    # Stream responses in real-time (default: true)
+</code></pre>
+<h4 id="model-configuration"><a class="header" href="#model-configuration">Model Configuration</a></h4>
+<pre><code class="language-bash">--model MODEL_NAME          # Specify the model to use (required)
+</code></pre>
+<h3 id="interactive-chat-experience"><a class="header" href="#interactive-chat-experience">Interactive Chat Experience</a></h3>
+<h4 id="session-flow"><a class="header" href="#session-flow">Session Flow</a></h4>
+<ol>
+<li><strong>Model Loading</strong>: Model is loaded if not cached</li>
+<li><strong>Chat Initialization</strong>: Engine and tokenizer are set up</li>
+<li><strong>Conversation Loop</strong>: User inputs are processed and responses generated</li>
+<li><strong>Session Termination</strong>: Exit with Ctrl+C or quit command</li>
+</ol>
+<h4 id="user-interaction"><a class="header" href="#user-interaction">User Interaction</a></h4>
+<p>The chat interface provides a conversational experience:</p>
+<pre><code>$ yaie chat microsoft/DialoGPT-medium
+Model loaded successfully!
+Starting chat session (press Ctrl+C to exit)...
+
+User: Hello, how are you?
+AI: I'm doing well, thank you for asking!
+
+User: What can you help me with?
+AI: I can have conversations, answer questions, and assist with various tasks.
+</code></pre>
+<h3 id="example-chat-commands"><a class="header" href="#example-chat-commands">Example Chat Commands</a></h3>
+<h4 id="basic-chat"><a class="header" href="#basic-chat">Basic Chat</a></h4>
+<pre><code class="language-bash">yaie chat microsoft/DialoGPT-medium
+</code></pre>
+<h4 id="creative-chat"><a class="header" href="#creative-chat">Creative Chat</a></h4>
+<pre><code class="language-bash">yaie chat microsoft/DialoGPT-medium --temperature 1.2 --top-p 0.9
+</code></pre>
+<h4 id="focused-chat"><a class="header" href="#focused-chat">Focused Chat</a></h4>
+<pre><code class="language-bash">yaie chat microsoft/DialoGPT-medium --temperature 0.7 --max-tokens 128
+</code></pre>
+<h2 id="model-selection-1"><a class="header" href="#model-selection-1">Model Selection</a></h2>
+<h3 id="supported-model-formats"><a class="header" href="#supported-model-formats">Supported Model Formats</a></h3>
+<p>The CLI supports any HuggingFace-compatible model:</p>
+<h4 id="pre-trained-models"><a class="header" href="#pre-trained-models">Pre-trained Models</a></h4>
+<pre><code class="language-bash">yaie serve microsoft/DialoGPT-medium
+yaie serve gpt2
+yaie serve facebook/opt-1.3b
+</code></pre>
+<h4 id="local-models"><a class="header" href="#local-models">Local Models</a></h4>
+<pre><code class="language-bash">yaie serve /path/to/local/model
+yaie serve ./models/my-custom-model
+</code></pre>
+<h3 id="model-caching"><a class="header" href="#model-caching">Model Caching</a></h3>
+<p>Models are automatically downloaded and cached:</p>
 <ul>
-<li><code>--model</code>: Name of the HuggingFace model or path to local model.</li>
-<li><code>--max-batch-size</code>: Limit the number of concurrent requests.</li>
-<li><code>--gpu-memory-utilization</code>: Fraction of GPU memory to use for KV cache (default 0.9).</li>
+<li>First run: Download from HuggingFace Hub</li>
+<li>Subsequent runs: Use cached version</li>
+<li>Cache location: Standard HuggingFace cache directory</li>
 </ul>
+<h2 id="performance-tuning"><a class="header" href="#performance-tuning">Performance Tuning</a></h2>
+<h3 id="memory-configuration"><a class="header" href="#memory-configuration">Memory Configuration</a></h3>
+<p>Adjust memory settings based on available GPU memory:</p>
+<pre><code class="language-bash"># For 24GB+ GPU
+yaie serve model --num-blocks 4000 --max-batch-size 32
+
+# For 8-16GB GPU  
+yaie serve model --num-blocks 1500 --max-batch-size 8
+
+# For 4-8GB GPU
+yaie serve model --num-blocks 800 --max-batch-size 4
+</code></pre>
+<h3 id="batch-size-optimization"><a class="header" href="#batch-size-optimization">Batch Size Optimization</a></h3>
+<p>Tune batch sizes for optimal throughput:</p>
+<pre><code class="language-bash"># High throughput (more memory)
+yaie serve model --max-batch-size 32 --max-prefill-batch-size 64
+
+# Memory efficient (lower batch sizes)
+yaie serve model --max-batch-size 4 --max-prefill-batch-size 8
+</code></pre>
+<h2 id="error-handling-and-troubleshooting"><a class="header" href="#error-handling-and-troubleshooting">Error Handling and Troubleshooting</a></h2>
+<h3 id="common-errors"><a class="header" href="#common-errors">Common Errors</a></h3>
+<h4 id="model-loading-errors"><a class="header" href="#model-loading-errors">Model Loading Errors</a></h4>
+<pre><code class="language-bash"># If model name is invalid
+Error: Model not found on HuggingFace Hub
+
+# If network is unavailable during first load
+Error: Failed to download model
+</code></pre>
+<h4 id="memory-errors"><a class="header" href="#memory-errors">Memory Errors</a></h4>
+<pre><code class="language-bash"># If not enough GPU memory
+CUDA out of memory error
+
+# If KV-cache is too large
+Memory allocation failed
+</code></pre>
+<h3 id="debugging-options"><a class="header" href="#debugging-options">Debugging Options</a></h3>
+<h4 id="verbose-output"><a class="header" href="#verbose-output">Verbose Output</a></h4>
+<pre><code class="language-bash">yaie serve model --verbose  # Show detailed startup information
+</code></pre>
+<h4 id="configuration-validation"><a class="header" href="#configuration-validation">Configuration Validation</a></h4>
+<pre><code class="language-bash">yaie serve model --debug    # Enable debugging features
+</code></pre>
+<h2 id="advanced-cli-features"><a class="header" href="#advanced-cli-features">Advanced CLI Features</a></h2>
+<h3 id="configuration-files"><a class="header" href="#configuration-files">Configuration Files</a></h3>
+<p>The CLI supports configuration files for complex setups:</p>
+<pre><code class="language-bash">yaie serve --config config.yaml model
+</code></pre>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<p>Several environment variables can customize behavior:</p>
+<pre><code class="language-bash"># Set default host
+export YAIE_HOST=0.0.0.0
+
+# Set default port  
+export YAIE_PORT=9000
+
+# Set memory limits
+export YAIE_MAX_BLOCKS=2000
+</code></pre>
+<h3 id="logging-configuration"><a class="header" href="#logging-configuration">Logging Configuration</a></h3>
+<p>Control logging verbosity and output:</p>
+<pre><code class="language-bash"># Enable detailed logging
+yaie serve model --log-level DEBUG
+
+# Log to file
+yaie serve model --log-file server.log
+</code></pre>
+<h2 id="integration-with-sglang-features"><a class="header" href="#integration-with-sglang-features">Integration with SGLang Features</a></h2>
+<h3 id="batching-optimization"><a class="header" href="#batching-optimization">Batching Optimization</a></h3>
+<p>The CLI exposes SGLang batching parameters:</p>
+<pre><code class="language-bash">yaie serve model \
+  --max-prefill-batch-size 16 \
+  --max-decode-batch-size 256
+</code></pre>
+<h3 id="prefix-sharing-control"><a class="header" href="#prefix-sharing-control">Prefix Sharing Control</a></h3>
+<p>Parameters that affect prefix sharing efficiency:</p>
+<pre><code class="language-bash">yaie serve model \
+  --max-seq-len 2048 \
+  --block-size 16
+</code></pre>
+<h2 id="production-deployment"><a class="header" href="#production-deployment">Production Deployment</a></h2>
+<h3 id="server-management"><a class="header" href="#server-management">Server Management</a></h3>
+<h4 id="process-control"><a class="header" href="#process-control">Process Control</a></h4>
+<pre><code class="language-bash"># Start server in background
+nohup yaie serve model &gt; server.log 2&gt;&amp;1 &amp;
+
+# Kill server process
+pkill -f "yaie serve"
+</code></pre>
+<h4 id="process-monitoring"><a class="header" href="#process-monitoring">Process Monitoring</a></h4>
+<pre><code class="language-bash"># Monitor server with systemd
+systemctl start yaie-server
+
+# Monitor with supervisor
+supervisorctl start yaie-server
+</code></pre>
+<h3 id="health-checks"><a class="header" href="#health-checks">Health Checks</a></h3>
+<p>The server provides health status:</p>
+<pre><code class="language-bash"># Check server status
+curl http://localhost:8000/health
+
+# Integrate with monitoring tools
+# Health check interval and thresholds
+</code></pre>
+<h2 id="examples-and-use-cases"><a class="header" href="#examples-and-use-cases">Examples and Use Cases</a></h2>
+<h3 id="development-usage"><a class="header" href="#development-usage">Development Usage</a></h3>
+<pre><code class="language-bash"># Quick test with small model
+yaie chat gpt2
+
+# Interactive development with verbose output
+yaie serve gpt2 --port 8000 --verbose
+</code></pre>
+<h3 id="production-usage"><a class="header" href="#production-usage">Production Usage</a></h3>
+<pre><code class="language-bash"># High-performance server for production
+yaie serve microsoft/DialoGPT-medium \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --max-batch-size 16 \
+  --num-blocks 2000
+
+# Low-resource server for edge deployment
+yaie serve gpt2 \
+  --max-batch-size 2 \
+  --num-blocks 500
+</code></pre>
+<h3 id="testing-and-evaluation"><a class="header" href="#testing-and-evaluation">Testing and Evaluation</a></h3>
+<pre><code class="language-bash"># Test with various parameters
+yaie chat model --temperature 0.5 --top-p 0.9
+
+# Evaluate different models
+yaie serve model1 --port 8001 &amp;
+yaie serve model2 --port 8002 &amp;
+</code></pre>
+<p>The CLI provides a comprehensive interface to access all of Mini-YAIE’s features, from simple interactive chat to high-performance API serving with SGLang-style optimizations.</p>
 
                     </main>
 

@@ -54,10 +54,10 @@
             const path_to_root = "../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../searchindex-b58c91dd.js";
+            window.path_to_searchindex_js = "../../searchindex-d63bbf73.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../toc-676105c4.js"></script>
+        <script src="../../toc-44f1b166.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,15 +197,157 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="python-kernels-guide"><a class="header" href="#python-kernels-guide">Python Kernels Guide</a></h1>
-<p>This section guides you through implementing the core Python logic “kernels”. These are not CUDA kernels, but critical algorithmic components.</p>
-<h2 id="your-tasks"><a class="header" href="#your-tasks">Your Tasks</a></h2>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The Python kernels in Mini-YAIE implement the core computational components that enable SGLang-style inference optimization. These kernels provide the foundational functionality for attention mechanisms, memory management, and token sampling that make efficient LLM inference possible.</p>
+<h2 id="kernel-architecture"><a class="header" href="#kernel-architecture">Kernel Architecture</a></h2>
+<h3 id="core-components"><a class="header" href="#core-components">Core Components</a></h3>
+<p>The kernel system consists of several interconnected modules:</p>
 <ol>
-<li><strong>Radix Tree</strong>: Implement the Trie data structure for prefix matching.</li>
-<li><strong>KV Cache Manager</strong>: Implement the block allocation strategy.</li>
-<li><strong>Sampling</strong>: Implement the token sampling logic.</li>
+<li><strong>Radix Tree</strong>: Implements prefix matching for shared computation</li>
+<li><strong>KV Cache Manager</strong>: Manages paged key-value storage</li>
+<li><strong>Radix Attention Module</strong>: Implements radial attention with shared computation</li>
+<li><strong>Sampling Module</strong>: Provides token selection algorithms</li>
 </ol>
-<p><strong>Why Python?</strong>
-While computation happens in CUDA, the <em>logic</em> of memory management and prefix matching is complex and best handled in Python (or C++ CPU code) before dispatching to the GPU.</p>
+<h3 id="sglang-style-optimization"><a class="header" href="#sglang-style-optimization">SGLang-Style Optimization</a></h3>
+<p>The kernels are designed to support SGLang’s key optimization strategies:</p>
+<ul>
+<li><strong>Prefix Sharing</strong>: Share computation for requests with common prefixes</li>
+<li><strong>Continuous Batching</strong>: Dynamically batch requests at different processing stages</li>
+<li><strong>Paged Memory Management</strong>: Efficiently manage KV-cache memory using fixed-size blocks</li>
+<li><strong>Radial Attention</strong>: Optimize attention computation for shared prefixes</li>
+</ul>
+<h2 id="python-kernel-implementation"><a class="header" href="#python-kernel-implementation">Python Kernel Implementation</a></h2>
+<h3 id="design-philosophy"><a class="header" href="#design-philosophy">Design Philosophy</a></h3>
+<p>The Python kernels follow these design principles:</p>
+<h4 id="1-educational-focus"><a class="header" href="#1-educational-focus">1. Educational Focus</a></h4>
+<ul>
+<li>Clean, well-documented code</li>
+<li>Clear algorithm implementation</li>
+<li>Comprehensive comments explaining concepts</li>
+</ul>
+<h4 id="2-sglang-compatibility"><a class="header" href="#2-sglang-compatibility">2. SGLang Compatibility</a></h4>
+<ul>
+<li>Implement SGLang-style optimization techniques</li>
+<li>Support for radial attention and prefix sharing</li>
+<li>Continuous batching integration</li>
+</ul>
+<h4 id="3-modularity"><a class="header" href="#3-modularity">3. Modularity</a></h4>
+<ul>
+<li>Independent components that can be tested individually</li>
+<li>Clean interfaces between components</li>
+<li>Easy to extend and modify</li>
+</ul>
+<h4 id="4-performance-considerations"><a class="header" href="#4-performance-considerations">4. Performance Considerations</a></h4>
+<ul>
+<li>Efficient data structures</li>
+<li>Proper memory management</li>
+<li>Optimized algorithm implementations</li>
+</ul>
+<h3 id="implementation-structure"><a class="header" href="#implementation-structure">Implementation Structure</a></h3>
+<p>Each kernel follows a similar pattern:</p>
+<pre><code class="language-python">class KernelName:
+    def __init__(self, parameters):
+        # Initialize kernel with configuration
+        pass
+    
+    def process(self, input_data):
+        # Core processing logic
+        pass
+    
+    def update_state(self, new_data):
+        # State management for ongoing requests
+        pass
+</code></pre>
+<h2 id="integration-with-system-components"><a class="header" href="#integration-with-system-components">Integration with System Components</a></h2>
+<h3 id="engine-integration"><a class="header" href="#engine-integration">Engine Integration</a></h3>
+<p>The kernels integrate seamlessly with the main inference engine:</p>
+<pre><code class="language-python"># Engine uses kernels for computation
+self.radix_attention = RadixAttentionWithPagedKVCache(...)
+self.kv_cache_manager = KVCacheManager(...)
+self.sampling_kernel = SamplingKernel()
+</code></pre>
+<h3 id="scheduler-coordination"><a class="header" href="#scheduler-coordination">Scheduler Coordination</a></h3>
+<p>Kernels work with the SGLang scheduler:</p>
+<ul>
+<li>Provide computation sharing opportunities</li>
+<li>Manage memory allocation and deallocation</li>
+<li>Coordinate with scheduling policies</li>
+</ul>
+<h3 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h3>
+<p>Kernels connect with the paged memory system:</p>
+<ul>
+<li>Request memory allocation through the manager</li>
+<li>Manage KV-cache blocks efficiently</li>
+<li>Support for shared memory blocks</li>
+</ul>
+<h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
+<h3 id="computational-efficiency"><a class="header" href="#computational-efficiency">Computational Efficiency</a></h3>
+<p>The Python kernels provide:</p>
+<ul>
+<li>Efficient attention computation</li>
+<li>Optimized memory access patterns</li>
+<li>Shared computation for common prefixes</li>
+</ul>
+<h3 id="memory-usage"><a class="header" href="#memory-usage">Memory Usage</a></h3>
+<p>Optimized memory management includes:</p>
+<ul>
+<li>Paged cache allocation</li>
+<li>Block-level memory sharing</li>
+<li>Efficient reuse of allocated blocks</li>
+</ul>
+<h3 id="scalability"><a class="header" href="#scalability">Scalability</a></h3>
+<p>The kernel design supports:</p>
+<ul>
+<li>Variable batch sizes</li>
+<li>Multiple concurrent requests</li>
+<li>Scaled performance with more requests</li>
+</ul>
+<h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
+<h3 id="computation-sharing"><a class="header" href="#computation-sharing">Computation Sharing</a></h3>
+<p>The radix tree and attention modules enable:</p>
+<ul>
+<li>Shared prefix identification</li>
+<li>Computation reuse across requests</li>
+<li>Efficient memory utilization</li>
+</ul>
+<h3 id="adaptive-processing"><a class="header" href="#adaptive-processing">Adaptive Processing</a></h3>
+<p>Kernels adapt to:</p>
+<ul>
+<li>Different request patterns</li>
+<li>Variable sequence lengths</li>
+<li>Changing memory requirements</li>
+</ul>
+<h2 id="testing-and-validation"><a class="header" href="#testing-and-validation">Testing and Validation</a></h2>
+<h3 id="unit-testing"><a class="header" href="#unit-testing">Unit Testing</a></h3>
+<p>Each kernel includes:</p>
+<ul>
+<li>Comprehensive unit tests</li>
+<li>Edge case validation</li>
+<li>Performance benchmarking</li>
+</ul>
+<h3 id="integration-testing"><a class="header" href="#integration-testing">Integration Testing</a></h3>
+<p>Kernels are tested as part of:</p>
+<ul>
+<li>Full inference pipeline</li>
+<li>SGLang-style optimization scenarios</li>
+<li>Memory management validation</li>
+</ul>
+<h2 id="extensibility"><a class="header" href="#extensibility">Extensibility</a></h2>
+<h3 id="adding-new-kernels"><a class="header" href="#adding-new-kernels">Adding New Kernels</a></h3>
+<p>The system supports:</p>
+<ul>
+<li>Easy addition of new kernel types</li>
+<li>Pluggable architecture for kernel replacement</li>
+<li>Backwards compatibility</li>
+</ul>
+<h3 id="customization"><a class="header" href="#customization">Customization</a></h3>
+<p>Kernels can be customized for:</p>
+<ul>
+<li>Specific model architectures</li>
+<li>Hardware optimization</li>
+<li>Performance tuning</li>
+</ul>
+<p>This Python kernel system forms the computational backbone of Mini-YAIE, implementing SGLang-style optimization techniques in an educational and accessible way.</p>
 
                     </main>
 

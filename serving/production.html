@@ -54,10 +54,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b58c91dd.js";
+            window.path_to_searchindex_js = "../searchindex-d63bbf73.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-676105c4.js"></script>
+        <script src="../toc-44f1b166.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,22 +196,300 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="production-considerations"><a class="header" href="#production-considerations">Production Considerations</a></h1>
-<p>While Mini-YAIE is educational, here is what you would need for production:</p>
-<h2 id="1-batching--latency"><a class="header" href="#1-batching--latency">1. Batching &amp; Latency</a></h2>
+                        <h1 id="production-deployment"><a class="header" href="#production-deployment">Production Deployment</a></h1>
+<p>While Mini-YAIE is primarily educational, understanding production considerations helps bridge the gap between learning and real-world deployment.</p>
+<h2 id="deployment-architecture"><a class="header" href="#deployment-architecture">Deployment Architecture</a></h2>
+<pre><code class="language-mermaid">graph TD
+    LoadBalancer --&gt;|HTTP| API1
+    LoadBalancer --&gt;|HTTP| API2
+    LoadBalancer --&gt;|HTTP| API3
+    API1 --&gt;|gRPC| Inference1
+    API2 --&gt;|gRPC| Inference2
+    API3 --&gt;|gRPC| Inference3
+    Inference1 --&gt;|GPU| Model1
+    Inference2 --&gt;|GPU| Model2
+    Inference3 --&gt;|GPU| Model3
+</code></pre>
+<h2 id="1-performance-optimization"><a class="header" href="#1-performance-optimization">1. Performance Optimization</a></h2>
+<h3 id="batching--latency-management"><a class="header" href="#batching--latency-management">Batching &amp; Latency Management</a></h3>
 <ul>
-<li><strong>Timeouts</strong>: Requests waiting too long in the queue should be handled.</li>
-<li><strong>Preemption</strong>: If high-priority requests come in, lower priority ones should be paused (swapped to CPU).</li>
+<li><strong>Request Timeouts</strong>: Implement configurable timeouts for requests waiting in queue</li>
+<li><strong>Priority Queues</strong>: Support different priority levels for requests</li>
+<li><strong>Preemption</strong>: Pause low-priority requests and swap their KV-cache to CPU when high-priority requests arrive</li>
+<li><strong>Adaptive Batching</strong>: Dynamically adjust batch sizes based on current load and latency requirements</li>
 </ul>
+<h3 id="continuous-batching-strategies"><a class="header" href="#continuous-batching-strategies">Continuous Batching Strategies</a></h3>
+<pre><code class="language-python"># Advanced scheduling policies
+class SchedulingPolicy(Enum):
+    FCFS = "fcfs"  # First-come-first-served
+    PRIORITY = "priority"  # Priority-based
+    FAIR = "fair"  # Fair sharing
+    LATENCY_OPTIMIZED = "latency"  # Minimize latency
+</code></pre>
 <h2 id="2-distributed-inference"><a class="header" href="#2-distributed-inference">2. Distributed Inference</a></h2>
+<h3 id="tensor-parallelism"><a class="header" href="#tensor-parallelism">Tensor Parallelism</a></h3>
+<pre><code class="language-python"># Split model weights across multiple GPUs
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    device_map={
+        "layer.0": "cuda:0",
+        "layer.1": "cuda:1",
+        "layer.2": "cuda:2",
+        "layer.3": "cuda:3"
+    }
+)
+</code></pre>
+<h3 id="pipeline-parallelism"><a class="header" href="#pipeline-parallelism">Pipeline Parallelism</a></h3>
+<pre><code class="language-python"># Split layers across different stages
+# Stage 1: Layers 0-10 on GPU 0
+# Stage 2: Layers 11-20 on GPU 1
+# Stage 3: Layers 21-30 on GPU 2
+</code></pre>
+<h3 id="model-parallelism"><a class="header" href="#model-parallelism">Model Parallelism</a></h3>
 <ul>
-<li><strong>Tensor Parallelism</strong>: Splitting the model weights across multiple GPUs (Megatron-LM style).</li>
-<li><strong>Pipeline Parallelism</strong>: Splitting layers across GPUs.</li>
+<li><strong>Expert Parallelism</strong>: For mixture-of-experts models</li>
+<li><strong>Sequence Parallelism</strong>: For very long sequences</li>
+<li><strong>Hybrid Parallelism</strong>: Combining multiple strategies</li>
 </ul>
-<h2 id="3-quantization"><a class="header" href="#3-quantization">3. Quantization</a></h2>
+<h2 id="3-memory-optimization"><a class="header" href="#3-memory-optimization">3. Memory Optimization</a></h2>
+<h3 id="quantization"><a class="header" href="#quantization">Quantization</a></h3>
+<pre><code class="language-python"># Load model with quantization
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    load_in_8bit=True,  # 8-bit quantization
+    device_map="auto"
+)
+
+# Or use 4-bit quantization
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    load_in_4bit=True,
+    device_map="auto"
+)
+</code></pre>
+<h3 id="memory-management-strategies"><a class="header" href="#memory-management-strategies">Memory Management Strategies</a></h3>
 <ul>
-<li><strong>FP8 / INT8</strong>: Running with lower precision to save memory and increase compute speed (using library like <code>bitsandbytes</code>).</li>
+<li><strong>Paged Attention</strong>: Efficient memory management for KV-cache</li>
+<li><strong>Memory Pooling</strong>: Reuse memory blocks across requests</li>
+<li><strong>Swapping</strong>: Move inactive KV-cache blocks to CPU memory</li>
+<li><strong>Compression</strong>: Compress KV-cache values with minimal quality loss</li>
 </ul>
+<h2 id="4-scalability--reliability"><a class="header" href="#4-scalability--reliability">4. Scalability &amp; Reliability</a></h2>
+<h3 id="horizontal-scaling"><a class="header" href="#horizontal-scaling">Horizontal Scaling</a></h3>
+<pre><code class="language-python"># Multiple inference workers behind load balancer
+workers = [
+    InferenceWorker(model_name, gpu_id=0),
+    InferenceWorker(model_name, gpu_id=1),
+    InferenceWorker(model_name, gpu_id=2),
+    InferenceWorker(model_name, gpu_id=3)
+]
+</code></pre>
+<h3 id="load-balancing"><a class="header" href="#load-balancing">Load Balancing</a></h3>
+<ul>
+<li><strong>Round Robin</strong>: Simple distribution across workers</li>
+<li><strong>Least Connections</strong>: Send to least busy worker</li>
+<li><strong>Latency-based</strong>: Send to worker with lowest current latency</li>
+<li><strong>Content-based</strong>: Route based on request characteristics</li>
+</ul>
+<h3 id="health-monitoring"><a class="header" href="#health-monitoring">Health Monitoring</a></h3>
+<pre><code class="language-python"># Health check endpoints
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "gpu_memory": get_gpu_memory_usage(),
+        "active_requests": scheduler.get_active_request_count(),
+        "queue_length": scheduler.get_queue_status()
+    }
+</code></pre>
+<h2 id="5-observability"><a class="header" href="#5-observability">5. Observability</a></h2>
+<h3 id="metrics-collection"><a class="header" href="#metrics-collection">Metrics Collection</a></h3>
+<pre><code class="language-python"># Prometheus metrics
+REQUEST_LATENCY = Histogram(
+    'request_latency_seconds',
+    'Request latency in seconds',
+    buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0]
+)
+
+TOKENS_PER_SECOND = Counter(
+    'tokens_per_second',
+    'Tokens generated per second'
+)
+</code></pre>
+<h3 id="logging"><a class="header" href="#logging">Logging</a></h3>
+<pre><code class="language-python"># Structured logging
+logger.info(
+    "Request completed",
+    request_id=request.id,
+    latency=latency_seconds,
+    tokens_generated=token_count,
+    model=model_name
+)
+</code></pre>
+<h3 id="tracing"><a class="header" href="#tracing">Tracing</a></h3>
+<pre><code class="language-python"># Distributed tracing
+with tracer.start_span("generate_response") as span:
+    span.set_attribute("model", model_name)
+    span.set_attribute("request_id", request.id)
+    response = engine.generate(prompt)
+</code></pre>
+<h2 id="6-security"><a class="header" href="#6-security">6. Security</a></h2>
+<h3 id="authentication"><a class="header" href="#authentication">Authentication</a></h3>
+<pre><code class="language-python"># API key authentication
+@app.post("/v1/chat/completions")
+async def chat_completions(
+    request: ChatCompletionRequest,
+    api_key: str = Header(None)
+):
+    if not validate_api_key(api_key):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+</code></pre>
+<h3 id="rate-limiting"><a class="header" href="#rate-limiting">Rate Limiting</a></h3>
+<pre><code class="language-python"># Rate limiting per API key
+limiter = RateLimiter(
+    requests_per_minute=1000,
+    burst_capacity=100
+)
+
+@app.post("/v1/chat/completions")
+@limiter.limit("1000/minute")
+async def chat_completions(request: ChatCompletionRequest):
+    # Process request
+</code></pre>
+<h3 id="input-validation"><a class="header" href="#input-validation">Input Validation</a></h3>
+<pre><code class="language-python"># Validate and sanitize inputs
+@app.post("/v1/chat/completions")
+async def chat_completions(request: ChatCompletionRequest):
+    # Validate prompt length
+    if len(request.prompt) &gt; MAX_PROMPT_LENGTH:
+        raise HTTPException(status_code=400, detail="Prompt too long")
+    
+    # Sanitize inputs
+    sanitized_prompt = sanitize_input(request.prompt)
+</code></pre>
+<h2 id="7-configuration-management"><a class="header" href="#7-configuration-management">7. Configuration Management</a></h2>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<pre><code class="language-bash"># Configure through environment variables
+export MODEL_NAME="gpt2"
+export MAX_BATCH_SIZE="16"
+export GPU_MEMORY_UTIL="0.9"
+export ENABLE_RADIX_CACHE="true"
+</code></pre>
+<h3 id="configuration-files"><a class="header" href="#configuration-files">Configuration Files</a></h3>
+<pre><code class="language-yaml"># YAML configuration
+model:
+  name: "gpt2"
+  dtype: "float16"
+  tensor_parallel_size: 1
+
+scheduler:
+  max_batch_size: 16
+  max_prefill_batch_size: 32
+  max_decode_batch_size: 256
+
+memory:
+  gpu_blocks: 2000
+  cpu_blocks: 1000
+  block_size: 16
+</code></pre>
+<h2 id="8-deployment-strategies"><a class="header" href="#8-deployment-strategies">8. Deployment Strategies</a></h2>
+<h3 id="containerization"><a class="header" href="#containerization">Containerization</a></h3>
+<pre><code class="language-dockerfile"># Dockerfile for Mini-YAIE
+FROM python:3.9-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+RUN pip install -e .
+
+CMD ["yaie", "serve", "gpt2", "--host", "0.0.0.0", "--port", "8000"]
+</code></pre>
+<h3 id="kubernetes-deployment"><a class="header" href="#kubernetes-deployment">Kubernetes Deployment</a></h3>
+<pre><code class="language-yaml"># Kubernetes deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yaie-inference
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: yaie-inference
+  template:
+    metadata:
+      labels:
+        app: yaie-inference
+    spec:
+      containers:
+      - name: yaie
+        image: yaie:latest
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+</code></pre>
+<h2 id="9-performance-monitoring"><a class="header" href="#9-performance-monitoring">9. Performance Monitoring</a></h2>
+<h3 id="key-metrics-to-track"><a class="header" href="#key-metrics-to-track">Key Metrics to Track</a></h3>
+<ul>
+<li><strong>Latency</strong>: Time from request to first token (TTFT) and time per token</li>
+<li><strong>Throughput</strong>: Tokens generated per second</li>
+<li><strong>GPU Utilization</strong>: Percentage of GPU time spent on computation</li>
+<li><strong>Memory Usage</strong>: GPU and CPU memory consumption</li>
+<li><strong>Queue Length</strong>: Number of requests waiting</li>
+<li><strong>Error Rates</strong>: Percentage of failed requests</li>
+</ul>
+<h3 id="alerting"><a class="header" href="#alerting">Alerting</a></h3>
+<pre><code class="language-python"># Set up alerts for critical conditions
+if gpu_memory_usage &gt; 0.95:
+    alert("High GPU memory usage")
+
+if request_latency &gt; 5.0:  # 5 seconds
+    alert("High request latency")
+
+if error_rate &gt; 0.01:  # 1%
+    alert("High error rate")
+</code></pre>
+<h2 id="10-cost-optimization"><a class="header" href="#10-cost-optimization">10. Cost Optimization</a></h2>
+<h3 id="resource-management"><a class="header" href="#resource-management">Resource Management</a></h3>
+<ul>
+<li><strong>Auto-scaling</strong>: Scale workers based on demand</li>
+<li><strong>Spot Instances</strong>: Use cheaper spot instances for non-critical workloads</li>
+<li><strong>Right-sizing</strong>: Choose appropriate instance types for workload</li>
+<li><strong>Batch Processing</strong>: Process offline requests in batches during low-traffic periods</li>
+</ul>
+<h3 id="model-selection"><a class="header" href="#model-selection">Model Selection</a></h3>
+<pre><code class="language-python"># Choose appropriate model size for use case
+small_models = ["gpt2", "DialoGPT-small"]  # Fast, low cost
+medium_models = ["gpt2-medium", "DialoGPT-medium"]  # Balanced
+large_models = ["gpt2-large", "DialoGPT-large"]  # High quality, expensive
+</code></pre>
+<h2 id="educational-focus"><a class="header" href="#educational-focus">Educational Focus</a></h2>
+<p>Understanding production considerations helps you:</p>
+<ol>
+<li><strong>Bridge the gap</strong> between educational implementations and real-world systems</li>
+<li><strong>Appreciate the complexity</strong> of production-grade inference engines</li>
+<li><strong>Make informed decisions</strong> about trade-offs in your implementations</li>
+<li><strong>Design for scalability</strong> from the beginning</li>
+</ol>
+<h2 id="from-mini-yaie-to-production"><a class="header" href="#from-mini-yaie-to-production">From Mini-YAIE to Production</a></h2>
+<p>Mini-YAIE provides the foundation for understanding key concepts:</p>
+<ul>
+<li><strong>Continuous Batching</strong>: The core of efficient inference</li>
+<li><strong>Memory Management</strong>: Critical for handling multiple requests</li>
+<li><strong>Prefix Sharing</strong>: Advanced optimization for similar requests</li>
+<li><strong>API Design</strong>: Standard interfaces for integration</li>
+</ul>
+<p>Production systems build on these foundations with:</p>
+<ul>
+<li><strong>Scalability</strong>: Handling thousands of concurrent requests</li>
+<li><strong>Reliability</strong>: High availability and fault tolerance</li>
+<li><strong>Observability</strong>: Comprehensive monitoring and logging</li>
+<li><strong>Security</strong>: Authentication, authorization, and input validation</li>
+</ul>
+<p>By mastering the concepts in Mini-YAIE, you’ll be well-prepared to understand and contribute to production-grade inference systems like vLLM, SGLang, and TensorRT-LLM.</p>
 
                     </main>
 

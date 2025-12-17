@@ -54,10 +54,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b58c91dd.js";
+            window.path_to_searchindex_js = "../searchindex-d63bbf73.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-676105c4.js"></script>
+        <script src="../toc-44f1b166.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,38 +196,116 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="system-overview"><a class="header" href="#system-overview">System Overview</a></h1>
-<p>Mini-YAIE follows a modular architecture similar to vLLM.</p>
-<h2 id="high-level-components"><a class="header" href="#high-level-components">High-Level Components</a></h2>
-<pre><code class="language-mermaid">graph TD
-    User[User / API Client] --&gt; API[FastAPI Server (server/api.py)]
-    API --&gt; Engine[Inference Engine (engine.py)]
-
-    subgraph Core Logic
-        Engine --&gt; Scheduler[SGLang Scheduler (core/sglang_scheduler.py)]
-        Engine --&gt; MM[Memory Manager (kernels/kv_cache.py)]
-        Engine --&gt; Model[LLM Model (HuggingFace)]
-    end
-
-    subgraph Kernels
-        Scheduler --&gt; RadixTree[Radix Tree (kernels/radix_tree.py)]
-        Model --&gt; RadixAttn[Radix Attention (kernels/radix_attention.py)]
-        Model --&gt; PagedAttn[Paged Attention (kernels/cuda/paged_attention.cu)]
-    end
-</code></pre>
-<h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
+                        <h1 id="system-architecture-overview"><a class="header" href="#system-architecture-overview">System Architecture Overview</a></h1>
+<h2 id="introduction"><a class="header" href="#introduction">Introduction</a></h2>
+<p>Mini-YAIE (Yet Another Inference Engine) is an educational implementation of modern LLM inference techniques, specifically designed to demonstrate concepts from state-of-the-art systems like SGLang, vLLM, and TensorRT-LLM. The architecture focuses on three core optimizations:</p>
 <ol>
-<li><strong>Request</strong>: User sends a prompt to the API.</li>
-<li><strong>Scheduling</strong>: Scheduler analyzes the prompt, checks the Radix Tree for cached prefixes, and assigns a Request ID.</li>
-<li><strong>Batching</strong>: <code>schedule_step</code> groups requests into Prefill (new) and Decode (running) batches.</li>
-<li><strong>Execution</strong>: The Engine runs the model.
-<ul>
-<li><strong>Prefill</strong>: Computes initial KV cache for new prompts.</li>
-<li><strong>Decode</strong>: Generates one token for running requests.</li>
-</ul>
-</li>
-<li><strong>Memory</strong>: The Memory Manager allocates/frees GPU blocks as needed.</li>
+<li><strong>Continuous Batching</strong>: Dynamically batching incoming requests to maximize GPU utilization</li>
+<li><strong>Radix Attention</strong>: Efficient attention mechanism with prefix sharing for similar requests</li>
+<li><strong>Paged KV-Cache</strong>: Memory-efficient key-value cache management</li>
 </ol>
+<h2 id="high-level-architecture"><a class="header" href="#high-level-architecture">High-Level Architecture</a></h2>
+<pre><code>┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   API Layer     │    │  Engine Core    │    │  Model/Kernels  │
+│  (FastAPI)      │◄──►│  (Scheduler,   │◄──►│  (PyTorch/     │
+│                 │    │  Attention)    │    │  CUDA)         │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         ▲                       ▲                       ▲
+         │                       │                       │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   CLI Layer     │    │  Model Loading  │    │  Memory Mgmt    │
+│  (yaie serve/   │    │  (HuggingFace  │    │  (Paged Cache)  │
+│   yaie chat)    │    │  Integration)   │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+</code></pre>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<h3 id="1-main-inference-engine-enginepy"><a class="header" href="#1-main-inference-engine-enginepy">1. Main Inference Engine (<code>engine.py</code>)</a></h3>
+<p>The main inference engine orchestrates all components and provides the high-level API for inference. It implements SGLang-style continuous batching with radix attention and prefix sharing.</p>
+<p><strong>Key Responsibilities:</strong></p>
+<ul>
+<li>Request orchestration and management</li>
+<li>Integration between scheduler, attention mechanisms, and memory management</li>
+<li>API layer communication</li>
+<li>Model loading and tokenizer management</li>
+</ul>
+<h3 id="2-sglang-scheduler-coresglang_schedulerpy"><a class="header" href="#2-sglang-scheduler-coresglang_schedulerpy">2. SGLang Scheduler (<code>core/sglang_scheduler.py</code>)</a></h3>
+<p>The SGLang-style scheduler implements advanced request scheduling with:</p>
+<ul>
+<li><strong>Prefix-based request grouping</strong>: Groups requests with common prefixes for computation sharing</li>
+<li><strong>Separate prefill and decode scheduling</strong>: Optimizes for the different computational patterns</li>
+<li><strong>Memory-aware batch sizing</strong>: Considers available KV-cache memory when scheduling</li>
+<li><strong>Continuous batching optimization</strong>: Maintains high GPU utilization</li>
+</ul>
+<h3 id="3-radix-attention-system-kernelsradix_attentionpy"><a class="header" href="#3-radix-attention-system-kernelsradix_attentionpy">3. Radix Attention System (<code>kernels/radix_attention.py</code>)</a></h3>
+<p>Implements the radial attention mechanism with:</p>
+<ul>
+<li><strong>Prefix sharing</strong>: Reduces redundant computation for requests with common prefixes</li>
+<li><strong>Paged KV-cache integration</strong>: Efficient memory management for variable-length requests</li>
+<li><strong>RoPE (Rotary Position Embeddings)</strong>: Supports position-aware attention</li>
+</ul>
+<h3 id="4-paged-kv-cache-management-kernelskv_cachepy"><a class="header" href="#4-paged-kv-cache-management-kernelskv_cachepy">4. Paged KV-Cache Management (<code>kernels/kv_cache.py</code>)</a></h3>
+<p>Efficient memory management using page-based allocation:</p>
+<ul>
+<li><strong>Fixed-size blocks</strong>: Reduces memory fragmentation</li>
+<li><strong>Request-to-block mapping</strong>: Tracks which blocks belong to which requests</li>
+<li><strong>Dynamic allocation/deallocation</strong>: Manages memory based on request lifecycle</li>
+</ul>
+<h3 id="5-radix-tree-system-kernelsradix_treepy"><a class="header" href="#5-radix-tree-system-kernelsradix_treepy">5. Radix Tree System (<code>kernels/radix_tree.py</code>)</a></h3>
+<p>Enables efficient prefix matching and computation sharing:</p>
+<ul>
+<li><strong>Trie-based structure</strong>: Organizes token sequences hierarchically</li>
+<li><strong>Request grouping</strong>: Identifies requests with shared prefixes</li>
+<li><strong>Computation optimization</strong>: Provides information for scheduler optimization</li>
+</ul>
+<h3 id="6-sampling-kernel-kernelssamplingpy"><a class="header" href="#6-sampling-kernel-kernelssamplingpy">6. Sampling Kernel (<code>kernels/sampling.py</code>)</a></h3>
+<p>Implements core sampling algorithms:</p>
+<ul>
+<li><strong>Temperature scaling</strong>: Controls randomness in generation</li>
+<li><strong>Top-K sampling</strong>: Limits selection to top K most probable tokens</li>
+<li><strong>Top-P (Nucleus) sampling</strong>: Limits selection to tokens that sum to probability P</li>
+</ul>
+<h3 id="7-api-server-serverapipy"><a class="header" href="#7-api-server-serverapipy">7. API Server (<code>server/api.py</code>)</a></h3>
+<p>Provides OpenAI-compatible API endpoints:</p>
+<ul>
+<li><strong>RESTful design</strong>: Follows OpenAI’s API specification</li>
+<li><strong>Streaming support</strong>: Real-time token streaming</li>
+<li><strong>Health monitoring</strong>: Server status endpoints</li>
+</ul>
+<h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
+<p>The system processes requests in the following sequence:</p>
+<ol>
+<li><strong>Request Arrival</strong>: Client sends a request through the API layer</li>
+<li><strong>Request Scheduling</strong>: SGLang scheduler groups requests with common prefixes</li>
+<li><strong>Prefill Phase</strong>: Process full prompt sequences using radial attention</li>
+<li><strong>Decode Phase</strong>: Generate tokens one-by-one with shared computation</li>
+<li><strong>KV-Cache Management</strong>: Efficient memory allocation and sharing</li>
+<li><strong>Response Generation</strong>: Return results via API layer</li>
+</ol>
+<h2 id="key-design-principles"><a class="header" href="#key-design-principles">Key Design Principles</a></h2>
+<h3 id="modularity"><a class="header" href="#modularity">Modularity</a></h3>
+<p>Each component is designed to be independent, allowing for focused learning and experimentation.</p>
+<h3 id="educational-focus"><a class="header" href="#educational-focus">Educational Focus</a></h3>
+<p>Clean, well-documented code with comprehensive explanations of key concepts.</p>
+<h3 id="sglang-style-optimization"><a class="header" href="#sglang-style-optimization">SGLang-Style Optimization</a></h3>
+<p>Focus on prefix sharing and radix trees to maximize computational efficiency.</p>
+<h3 id="memory-efficiency"><a class="header" href="#memory-efficiency">Memory Efficiency</a></h3>
+<p>Paged cache management to reduce memory fragmentation and maximize utilization.</p>
+<h2 id="architecture-benefits"><a class="header" href="#architecture-benefits">Architecture Benefits</a></h2>
+<ol>
+<li><strong>High Throughput</strong>: Continuous batching and prefix sharing maximize GPU utilization</li>
+<li><strong>Memory Efficiency</strong>: Paged KV-cache reduces fragmentation and enables larger batch sizes</li>
+<li><strong>Scalability</strong>: Modular design allows for optimization of individual components</li>
+<li><strong>Educational Value</strong>: Clean implementation of state-of-the-art techniques</li>
+</ol>
+<h2 id="integration-points"><a class="header" href="#integration-points">Integration Points</a></h2>
+<p>The system integrates components through well-defined interfaces:</p>
+<ul>
+<li>Engine connects to scheduler for request management</li>
+<li>Scheduler connects to memory manager for KV-cache coordination</li>
+<li>Attention mechanisms access KV-cache through the memory manager</li>
+<li>Sampler provides token selection for generation</li>
+<li>API layer communicates with the engine for request processing</li>
+</ul>
 
                     </main>
 
@@ -237,7 +315,7 @@
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../architecture/engine.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../architecture/configuration.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -251,7 +329,7 @@
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../architecture/engine.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../architecture/configuration.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

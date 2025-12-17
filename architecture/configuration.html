@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Mini-YAIE: Educational LLM Inference Engine</title>
+        <title>Configuration Management - Mini-YAIE: Educational LLM Inference Engine</title>
 
 
         <!-- Custom HTML head -->
@@ -196,30 +196,190 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="welcome-to-mini-yaie"><a class="header" href="#welcome-to-mini-yaie">Welcome to Mini-YAIE</a></h1>
-<p><strong>Mini-YAIE</strong> (Yet Another Inference Engine) is an educational project designed to demystify modern Large Language Model (LLM) inference engines.</p>
-<p>Driven by the need for efficiency, modern engines like <strong>SGLang</strong>, <strong>vLLM</strong>, and <strong>TensorRT-LLM</strong> use sophisticated techniques to maximize GPU throughput and minimize latency. Mini-YAIE provides a simplified, clean implementation of these concepts, focusing on:</p>
+                        <h1 id="configuration-management"><a class="header" href="#configuration-management">Configuration Management</a></h1>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Mini-YAIE uses a flexible configuration system that allows users to customize various aspects of the inference engine without modifying the code. The configuration system provides settings for memory management, scheduling, model loading, and performance optimization.</p>
+<h2 id="configuration-structure"><a class="header" href="#configuration-structure">Configuration Structure</a></h2>
+<p>The configuration system is built around the main <code>config.py</code> file in the src directory. The system supports:</p>
 <ul>
-<li><strong>Continuous Batching</strong></li>
-<li><strong>Paged KV Caching</strong></li>
-<li><strong>Radix Attention (Prefix Sharing)</strong></li>
+<li>Environment variable overrides</li>
+<li>Default values for all parameters</li>
+<li>Type checking and validation</li>
+<li>Component-specific configuration sections</li>
 </ul>
-<h2 id="how-to-use-this-guide"><a class="header" href="#how-to-use-this-guide">How to use this guide</a></h2>
-<p>This documentation is structured to take you from high-level concepts to low-level implementation.</p>
+<h2 id="key-configuration-parameters"><a class="header" href="#key-configuration-parameters">Key Configuration Parameters</a></h2>
+<h3 id="engine-configuration"><a class="header" href="#engine-configuration">Engine Configuration</a></h3>
+<pre><code class="language-python"># Maximum batch size for processing requests
+max_batch_size: int = 8
+
+# Maximum batch size for prefill operations
+max_prefill_batch_size: int = 16
+
+# Maximum batch size for decode operations
+max_decode_batch_size: int = 256
+
+# Maximum sequence length allowed
+max_seq_len: int = 2048
+</code></pre>
+<h3 id="memory-management-configuration"><a class="header" href="#memory-management-configuration">Memory Management Configuration</a></h3>
+<pre><code class="language-python"># Number of memory blocks in the KV-cache pool
+num_blocks: int = 2000
+
+# Size of each memory block (in tokens)
+block_size: int = 16
+
+# Data type for KV-cache storage
+dtype: torch.dtype = torch.float16
+</code></pre>
+<h3 id="model-specific-configuration"><a class="header" href="#model-specific-configuration">Model-Specific Configuration</a></h3>
+<pre><code class="language-python"># Model name for HuggingFace loading
+model_name: str
+
+# Maximum tokens to generate per request
+default_max_tokens: int = 128
+
+# Default sampling temperature
+default_temperature: float = 1.0
+
+# Default top-p value
+default_top_p: float = 1.0
+</code></pre>
+<h2 id="configuration-loading"><a class="header" href="#configuration-loading">Configuration Loading</a></h2>
+<h3 id="default-configuration"><a class="header" href="#default-configuration">Default Configuration</a></h3>
+<p>When no explicit configuration is provided, the system uses sensible defaults that work well for most educational purposes:</p>
+<ul>
+<li>Conservative memory usage to work on most GPUs</li>
+<li>Balanced performance settings</li>
+<li>Safe batch sizes that avoid out-of-memory errors</li>
+</ul>
+<h3 id="custom-configuration"><a class="header" href="#custom-configuration">Custom Configuration</a></h3>
+<p>Users can customize configurations by:</p>
 <ol>
-<li><strong>Core Concepts</strong>: Start here to understand the <em>why</em> and <em>what</em> of inference optimization.</li>
-<li><strong>Architecture</strong>: Understand how the system components fit together.</li>
-<li><strong>Implementation Guides</strong>: Step-by-step guides to implementing the missing “kernels” in Python and CUDA.</li>
+<li><strong>Direct parameter passing</strong> to constructors</li>
+<li><strong>Environment variables</strong> for deployment scenarios</li>
+<li><strong>Configuration files</strong> (when implemented)</li>
 </ol>
-<h2 id="your-mission"><a class="header" href="#your-mission">Your Mission</a></h2>
-<p>The codebase contains <strong>placeholders</strong> (<code>NotImplementedError</code>) for critical components. Your goal is to implement these components following this guide, turning Mini-YAIE from a skeleton into a fully functional inference engine.</p>
+<h2 id="configuration-best-practices"><a class="header" href="#configuration-best-practices">Configuration Best Practices</a></h2>
+<h3 id="performance-tuning"><a class="header" href="#performance-tuning">Performance Tuning</a></h3>
+<p>For production use, consider these configuration adjustments:</p>
+<ul>
+<li><strong>Increase batch sizes</strong> based on available GPU memory</li>
+<li><strong>Adjust block size</strong> for optimal cache utilization</li>
+<li><strong>Tune memory pool size</strong> based on request patterns</li>
+</ul>
+<h3 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h3>
+<p>Configure memory settings based on your hardware:</p>
+<pre><code class="language-python"># For high-end GPUs (24GB+ VRAM)
+num_blocks = 4000
+max_batch_size = 32
+
+# For mid-range GPUs (8-16GB VRAM)
+num_blocks = 1000
+max_batch_size = 8
+
+# For entry-level GPUs (4-8GB VRAM)
+num_blocks = 500
+max_batch_size = 4
+</code></pre>
+<h2 id="integration-with-components"><a class="header" href="#integration-with-components">Integration with Components</a></h2>
+<h3 id="engine-integration"><a class="header" href="#engine-integration">Engine Integration</a></h3>
+<p>The main engine reads configuration parameters during initialization:</p>
+<pre><code class="language-python">def __init__(self, model_name: str, config: Optional[Config] = None):
+    self.config = config or self._get_default_config()
+    # Initialize components with config values
+    self.scheduler = SGLangScheduler(
+        max_batch_size=self.config.max_batch_size,
+        max_prefill_batch_size=self.config.max_prefill_batch_size,
+        max_decode_batch_size=self.config.max_decode_batch_size
+    )
+</code></pre>
+<h3 id="scheduler-configuration"><a class="header" href="#scheduler-configuration">Scheduler Configuration</a></h3>
+<p>The SGLang scheduler uses configuration for scheduling policies:</p>
+<ul>
+<li>Batch size limits</li>
+<li>Prefill/decode phase sizing</li>
+<li>Memory-aware scheduling decisions</li>
+</ul>
+<h3 id="memory-manager-configuration"><a class="header" href="#memory-manager-configuration">Memory Manager Configuration</a></h3>
+<p>The KV-cache manager uses configuration for:</p>
+<ul>
+<li>Total memory pool size</li>
+<li>Block allocation strategies</li>
+<li>Memory optimization policies</li>
+</ul>
+<h2 id="environment-specific-configuration"><a class="header" href="#environment-specific-configuration">Environment-Specific Configuration</a></h2>
+<h3 id="development-configuration"><a class="header" href="#development-configuration">Development Configuration</a></h3>
+<p>For development and learning:</p>
+<ul>
+<li>Conservative memory limits</li>
+<li>Detailed logging</li>
+<li>Debug information enabled</li>
+</ul>
+<h3 id="production-configuration"><a class="header" href="#production-configuration">Production Configuration</a></h3>
+<p>For production deployment:</p>
+<ul>
+<li>Optimized batch sizes</li>
+<li>Performance-focused settings</li>
+<li>Minimal logging overhead</li>
+</ul>
+<h2 id="configuration-validation"><a class="header" href="#configuration-validation">Configuration Validation</a></h2>
+<p>The system validates configuration parameters to prevent:</p>
+<ul>
+<li>Memory allocation failures</li>
+<li>Invalid parameter combinations</li>
+<li>Performance-degrading settings</li>
+</ul>
+<h2 id="future-extensions"><a class="header" href="#future-extensions">Future Extensions</a></h2>
+<p>The configuration system is designed to accommodate:</p>
+<ul>
+<li>Model-specific optimizations</li>
+<li>Hardware-aware tuning</li>
+<li>Runtime configuration updates</li>
+<li>Performance auto-tuning</li>
+</ul>
+<h2 id="configuration-examples"><a class="header" href="#configuration-examples">Configuration Examples</a></h2>
+<h3 id="basic-configuration"><a class="header" href="#basic-configuration">Basic Configuration</a></h3>
+<pre><code class="language-python"># Minimal configuration for learning
+config = {
+    "max_batch_size": 4,
+    "num_blocks": 1000,
+    "block_size": 16
+}
+</code></pre>
+<h3 id="performance-configuration"><a class="header" href="#performance-configuration">Performance Configuration</a></h3>
+<pre><code class="language-python"># Optimized for throughput
+config = {
+    "max_batch_size": 32,
+    "max_decode_batch_size": 512,
+    "num_blocks": 4000,
+    "block_size": 32
+}
+</code></pre>
+<h2 id="troubleshooting-configuration-issues"><a class="header" href="#troubleshooting-configuration-issues">Troubleshooting Configuration Issues</a></h2>
+<h3 id="memory-issues"><a class="header" href="#memory-issues">Memory Issues</a></h3>
+<p>If experiencing out-of-memory errors:</p>
+<ol>
+<li>Reduce <code>num_blocks</code> in KV-cache</li>
+<li>Lower batch sizes</li>
+<li>Check available GPU memory</li>
+</ol>
+<h3 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h3>
+<p>If experiencing low throughput:</p>
+<ol>
+<li>Increase batch sizes</li>
+<li>Optimize block size for your model</li>
+<li>Verify CUDA availability and compatibility</li>
+</ol>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../architecture/system_overview.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="../intro/prerequisites.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../architecture/engine.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -229,8 +389,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../architecture/system_overview.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="../intro/prerequisites.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../architecture/engine.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

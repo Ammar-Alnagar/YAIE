@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Mini-YAIE: Educational LLM Inference Engine</title>
+        <title>Model Loading - Mini-YAIE: Educational LLM Inference Engine</title>
 
 
         <!-- Custom HTML head -->
@@ -196,30 +196,159 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="welcome-to-mini-yaie"><a class="header" href="#welcome-to-mini-yaie">Welcome to Mini-YAIE</a></h1>
-<p><strong>Mini-YAIE</strong> (Yet Another Inference Engine) is an educational project designed to demystify modern Large Language Model (LLM) inference engines.</p>
-<p>Driven by the need for efficiency, modern engines like <strong>SGLang</strong>, <strong>vLLM</strong>, and <strong>TensorRT-LLM</strong> use sophisticated techniques to maximize GPU throughput and minimize latency. Mini-YAIE provides a simplified, clean implementation of these concepts, focusing on:</p>
+                        <h1 id="model-loading"><a class="header" href="#model-loading">Model Loading</a></h1>
+<p>YAIE supports loading models from HuggingFace Hub with automatic caching and local model support.</p>
+<h2 id="modelloader-class"><a class="header" href="#modelloader-class">ModelLoader Class</a></h2>
+<p>The <code>ModelLoader</code> class in <code>src/models/loader.py</code> handles all model and tokenizer loading operations.</p>
+<h3 id="initialization"><a class="header" href="#initialization">Initialization</a></h3>
+<pre><code class="language-python">from src.models.loader import ModelLoader
+
+# Load from HuggingFace Hub
+loader = ModelLoader("microsoft/DialoGPT-medium")
+
+# Load from local path
+loader = ModelLoader("/path/to/local/model")
+</code></pre>
+<h3 id="loading-models"><a class="header" href="#loading-models">Loading Models</a></h3>
+<pre><code class="language-python"># Load the model
+model = loader.load_model()
+
+# Load the tokenizer
+tokenizer = loader.load_tokenizer()
+</code></pre>
+<h2 id="supported-model-sources"><a class="header" href="#supported-model-sources">Supported Model Sources</a></h2>
+<h3 id="huggingface-hub-models"><a class="header" href="#huggingface-hub-models">HuggingFace Hub Models</a></h3>
+<p>YAIE can load any compatible model from HuggingFace Hub:</p>
+<pre><code class="language-python"># Popular conversational models
+loader = ModelLoader("microsoft/DialoGPT-medium")
+loader = ModelLoader("microsoft/DialoGPT-large")
+
+# Code generation models
+loader = ModelLoader("Salesforce/codegen-350M-mono")
+
+# General purpose models
+loader = ModelLoader("gpt2")
+loader = ModelLoader("gpt2-medium")
+</code></pre>
+<h3 id="local-models"><a class="header" href="#local-models">Local Models</a></h3>
+<p>You can also load models from local directories:</p>
+<pre><code class="language-python"># Load from local path
+loader = ModelLoader("./models/my-custom-model")
+</code></pre>
+<h2 id="caching-behavior"><a class="header" href="#caching-behavior">Caching Behavior</a></h2>
+<h3 id="automatic-caching"><a class="header" href="#automatic-caching">Automatic Caching</a></h3>
+<p>Models are automatically cached in the standard HuggingFace cache directory:</p>
 <ul>
-<li><strong>Continuous Batching</strong></li>
-<li><strong>Paged KV Caching</strong></li>
-<li><strong>Radix Attention (Prefix Sharing)</strong></li>
+<li><strong>Linux/macOS</strong>: <code>~/.cache/huggingface/</code></li>
+<li><strong>Windows</strong>: <code>C:\Users\&lt;username&gt;\.cache\huggingface\</code></li>
 </ul>
-<h2 id="how-to-use-this-guide"><a class="header" href="#how-to-use-this-guide">How to use this guide</a></h2>
-<p>This documentation is structured to take you from high-level concepts to low-level implementation.</p>
+<h3 id="cache-structure"><a class="header" href="#cache-structure">Cache Structure</a></h3>
+<pre><code>~/.cache/huggingface/
+├── hub/
+│   └── models--microsoft--DialoGPT-medium/
+│       ├── blobs/
+│       ├── refs/
+│       └── snapshots/
+│           └── abc123.../
+│               ├── config.json
+│               ├── pytorch_model.bin
+│               └── tokenizer.json
+</code></pre>
+<h3 id="cache-management"><a class="header" href="#cache-management">Cache Management</a></h3>
+<p>The loader automatically:</p>
 <ol>
-<li><strong>Core Concepts</strong>: Start here to understand the <em>why</em> and <em>what</em> of inference optimization.</li>
-<li><strong>Architecture</strong>: Understand how the system components fit together.</li>
-<li><strong>Implementation Guides</strong>: Step-by-step guides to implementing the missing “kernels” in Python and CUDA.</li>
+<li>Checks for existing models in cache</li>
+<li>Downloads missing models from HuggingFace Hub</li>
+<li>Uses cached models for subsequent loads</li>
 </ol>
-<h2 id="your-mission"><a class="header" href="#your-mission">Your Mission</a></h2>
-<p>The codebase contains <strong>placeholders</strong> (<code>NotImplementedError</code>) for critical components. Your goal is to implement these components following this guide, turning Mini-YAIE from a skeleton into a fully functional inference engine.</p>
+<h2 id="model-configuration"><a class="header" href="#model-configuration">Model Configuration</a></h2>
+<h3 id="data-types"><a class="header" href="#data-types">Data Types</a></h3>
+<p>Models are loaded with optimized data types:</p>
+<pre><code class="language-python"># Models are loaded with float16 by default for efficiency
+model = AutoModelForCausalLM.from_pretrained(
+    model_path,
+    torch_dtype=torch.float16,  # Half precision
+    device_map="auto"          # Automatic device placement
+)
+</code></pre>
+<h3 id="device-placement"><a class="header" href="#device-placement">Device Placement</a></h3>
+<ul>
+<li><strong>Single GPU</strong>: Model is loaded directly to GPU</li>
+<li><strong>Multi-GPU</strong>: Automatically distributed across available GPUs</li>
+<li><strong>CPU</strong>: Falls back to CPU if no GPU available</li>
+</ul>
+<h2 id="tokenizer-configuration"><a class="header" href="#tokenizer-configuration">Tokenizer Configuration</a></h2>
+<h3 id="automatic-pad-token"><a class="header" href="#automatic-pad-token">Automatic Pad Token</a></h3>
+<p>The loader ensures tokenizers have a pad token:</p>
+<pre><code class="language-python">if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
+</code></pre>
+<p>This is important for batch processing where sequences need to be padded to the same length.</p>
+<h2 id="memory-optimization"><a class="header" href="#memory-optimization">Memory Optimization</a></h2>
+<h3 id="lazy-loading"><a class="header" href="#lazy-loading">Lazy Loading</a></h3>
+<p>Models are loaded on-demand, not at import time:</p>
+<pre><code class="language-python"># Model is not loaded here
+loader = ModelLoader("gpt2")
+
+# Model is loaded here when requested
+model = loader.load_model()
+</code></pre>
+<h3 id="memory-mapping"><a class="header" href="#memory-mapping">Memory Mapping</a></h3>
+<p>Large models use memory mapping to reduce RAM usage during loading.</p>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="network-issues"><a class="header" href="#network-issues">Network Issues</a></h3>
+<p>If downloading fails, the loader will retry and provide clear error messages.</p>
+<h3 id="incompatible-models"><a class="header" href="#incompatible-models">Incompatible Models</a></h3>
+<p>Models must be compatible with <code>AutoModelForCausalLM</code>. Incompatible models will raise clear errors.</p>
+<h3 id="disk-space"><a class="header" href="#disk-space">Disk Space</a></h3>
+<p>Large models require significant disk space. The loader shows download progress and estimated sizes.</p>
+<h2 id="performance-tips"><a class="header" href="#performance-tips">Performance Tips</a></h2>
+<h3 id="pre-download-models"><a class="header" href="#pre-download-models">Pre-download Models</a></h3>
+<p>For production deployments, pre-download models:</p>
+<pre><code class="language-bash"># This will cache the model
+python -c "from src.models.loader import ModelLoader; loader = ModelLoader('microsoft/DialoGPT-medium'); loader.load_model()"
+</code></pre>
+<h3 id="cache-location"><a class="header" href="#cache-location">Cache Location</a></h3>
+<p>You can customize the cache location by setting the <code>HF_HOME</code> environment variable:</p>
+<pre><code class="language-bash">export HF_HOME=/path/to/custom/cache
+</code></pre>
+<h3 id="model-selection"><a class="header" href="#model-selection">Model Selection</a></h3>
+<p>Choose appropriate model sizes for your hardware:</p>
+<ul>
+<li><strong>Small models</strong> (&lt; 1GB): <code>gpt2</code>, <code>DialoGPT-small</code></li>
+<li><strong>Medium models</strong> (1-5GB): <code>gpt2-medium</code>, <code>DialoGPT-medium</code></li>
+<li><strong>Large models</strong> (&gt; 5GB): <code>gpt2-large</code>, <code>DialoGPT-large</code></li>
+</ul>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
+<p><strong>“Model not found” errors:</strong></p>
+<ul>
+<li>Check model name spelling</li>
+<li>Verify model exists on HuggingFace Hub</li>
+<li>Ensure internet connection for downloads</li>
+</ul>
+<p><strong>Out of memory errors:</strong></p>
+<ul>
+<li>Try smaller models</li>
+<li>Reduce batch sizes in configuration</li>
+<li>Use CPU-only mode if GPU memory is insufficient</li>
+</ul>
+<p><strong>Tokenizer issues:</strong></p>
+<ul>
+<li>Some models may require special token handling</li>
+<li>Check the model’s documentation on HuggingFace Hub
+<parameter name="filePath">docs/src/intro/model_loading.md</parameter></li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../intro/setup.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="../intro/prerequisites.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../concepts/llm_inference.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -229,8 +358,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../intro/setup.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="../intro/prerequisites.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../concepts/llm_inference.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -54,10 +54,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b58c91dd.js";
+            window.path_to_searchindex_js = "../searchindex-d63bbf73.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-676105c4.js"></script>
+        <script src="../toc-44f1b166.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,45 +196,204 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="the-engine-enginepy"><a class="header" href="#the-engine-enginepy">The Engine (<code>engine.py</code>)</a></h1>
-<p>The <code>InferenceEngine</code> class is the conductor of the orchestra. It ties everything together.</p>
-<h2 id="the-process-visualized"><a class="header" href="#the-process-visualized">The Process Visualized</a></h2>
-<pre><code class="language-mermaid">graph TD
-    User --&gt;|Prompts| Engine
-    Engine --&gt;|Request| Scheduler
-    Scheduler --&gt;|Batch| Engine
-    Engine --&gt;|Prefill| Model
-    Engine --&gt;|Decode| Model
-    Model --&gt;|Logits| Sampling
-    Sampling --&gt;|Token| Engine
+                        <h1 id="engine-orchestration"><a class="header" href="#engine-orchestration">Engine Orchestration</a></h1>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The Inference Engine serves as the main orchestrator of the Mini-YAIE system, coordinating between various components to provide a unified interface for LLM inference. The engine implements SGLang-style continuous batching with radial attention and prefix sharing to maximize efficiency and throughput.</p>
+<h2 id="engine-architecture"><a class="header" href="#engine-architecture">Engine Architecture</a></h2>
+<p>The main engine is implemented in <code>src/engine.py</code> and follows a modular design pattern where each component is responsible for specific aspects of request processing:</p>
+<pre><code>┌─────────────────┐
+│   API Layer     │  ← Requests enter here
+├─────────────────┤
+│ Engine Orchestration │  ← Coordination happens here
+├─────────────────┤
+│   Scheduler     │  ← Request scheduling
+├─────────────────┤
+│  Memory Manager │  ← KV-cache management
+├─────────────────┤
+│  Attention Core │  ← Radial attention computation
+├─────────────────┤
+│  Model/Kernel   │  ← Forward pass execution
+└─────────────────┘
 </code></pre>
-<h2 id="responsibilities"><a class="header" href="#responsibilities">Responsibilities</a></h2>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<h3 id="1-model-loading-integration"><a class="header" href="#1-model-loading-integration">1. Model Loading Integration</a></h3>
+<p>The engine handles model and tokenizer loading through the ModelLoader component:</p>
+<pre><code class="language-python">def __init__(self, model_name: str):
+    self.tokenizer: PreTrainedTokenizer = self._load_tokenizer()
+    self.model = self._load_model()
+</code></pre>
+<p>This ensures that models are properly loaded from HuggingFace or local cache with appropriate configuration.</p>
+<h3 id="2-sglang-style-scheduler"><a class="header" href="#2-sglang-style-scheduler">2. SGLang-Style Scheduler</a></h3>
+<p>The engine integrates with the SGLangScheduler for advanced request scheduling:</p>
+<pre><code class="language-python">self.scheduler = SGLangScheduler(
+    max_batch_size=8, 
+    max_prefill_batch_size=16, 
+    max_decode_batch_size=256
+)
+</code></pre>
+<p>The scheduler implements prefix grouping and multi-step processing for computation sharing.</p>
+<h3 id="3-radial-attention-system"><a class="header" href="#3-radial-attention-system">3. Radial Attention System</a></h3>
+<p>The engine connects to the radial attention mechanism:</p>
+<pre><code class="language-python">self.radix_attention = RadixAttentionWithPagedKVCache(
+    num_layers=self.model.config.num_hidden_layers,
+    num_heads=self.model.config.num_attention_heads,
+    head_dim=self.model.config.hidden_size // self.model.config.num_attention_heads,
+)
+</code></pre>
+<h3 id="4-kv-cache-management"><a class="header" href="#4-kv-cache-management">4. KV-Cache Management</a></h3>
+<p>The engine manages memory through the KVCacheManager:</p>
+<pre><code class="language-python">self.kv_cache_manager = KVCacheManager(
+    num_blocks=2000,
+    block_size=16,
+    num_heads=self.model.config.num_attention_heads,
+    head_dim=self.model.config.hidden_size // self.model.config.num_attention_heads,
+    dtype=torch.float16,
+)
+</code></pre>
+<h2 id="request-processing-flow"><a class="header" href="#request-processing-flow">Request Processing Flow</a></h2>
+<h3 id="1-request-addition"><a class="header" href="#1-request-addition">1. Request Addition</a></h3>
+<pre><code class="language-python">def generate(self, prompts: List[str], **kwargs) -&gt; List[str]:
+    # Add requests to scheduler
+    request_ids = []
+    for prompt in prompts:
+        req_id = self.scheduler.add_request(prompt, **kwargs)
+        request_ids.append(req_id)
+</code></pre>
+<h3 id="2-generation-loop"><a class="header" href="#2-generation-loop">2. Generation Loop</a></h3>
+<p>The engine runs a main generation loop that processes requests:</p>
+<pre><code class="language-python">def _run_generation_loop(self, request_ids: List[str]) -&gt; List[str]:
+    # Process requests in batches
+    # Handle prefill and decode phases
+    # Manage KV-cache efficiently
+</code></pre>
+<h3 id="3-response-generation"><a class="header" href="#3-response-generation">3. Response Generation</a></h3>
+<p>The engine generates responses with proper tokenization and formatting:</p>
+<pre><code class="language-python"># Generate response using the existing generate method
+responses = self.generate([formatted_prompt], **kwargs)
+generated_text = responses[0] if responses else ""
+</code></pre>
+<h2 id="sglang-style-optimization-features"><a class="header" href="#sglang-style-optimization-features">SGLang-Style Optimization Features</a></h2>
+<h3 id="1-continuous-batching"><a class="header" href="#1-continuous-batching">1. Continuous Batching</a></h3>
+<p>The engine supports continuous batching where requests at different stages can be processed together:</p>
 <ul>
-<li><strong>Initialization</strong>: Loads the Model, Tokenizer, Scheduler, and Memory Manager.</li>
-<li><strong>Request Entry</strong>: Accepts <code>generate()</code> calls and pushes them to the Scheduler.</li>
-<li><strong>The Loop</strong>: Runs the continuous batching loop <code>_run_generation_loop</code>.</li>
+<li>Prefill requests (processing full prompts)</li>
+<li>Decode requests (generating single tokens)</li>
+<li>Mixed batches combining both types</li>
 </ul>
-<h2 id="key-method-_run_generation_loop"><a class="header" href="#key-method-_run_generation_loop">Key Method: <code>_run_generation_loop</code></a></h2>
-<p>This is the heart of continuous batching.</p>
-<pre><code class="language-python">while has_active_requests:
-    # 1. Ask Scheduler for work
-    prefill_batch, decode_batch = scheduler.schedule_step()
-
-    # 2. Run Prefill (Compute-bound)
-    if prefill_batch:
-        run_prefill(prefill_batch)
-
-    # 3. Run Decode (Memory-bound)
-    if decode_batch:
-        run_decode(decode_batch)
+<h3 id="2-prefix-sharing"><a class="header" href="#2-prefix-sharing">2. Prefix Sharing</a></h3>
+<p>The engine enables computation sharing for requests with common prefixes:</p>
+<ul>
+<li>Radix tree identifies shared prefixes</li>
+<li>Common computations are performed once</li>
+<li>Results are shared among multiple requests</li>
+</ul>
+<h3 id="3-memory-efficiency"><a class="header" href="#3-memory-efficiency">3. Memory Efficiency</a></h3>
+<p>The engine optimizes memory usage through:</p>
+<ul>
+<li>Paged KV-cache management</li>
+<li>Block allocation strategies</li>
+<li>Memory reclamation for completed requests</li>
+</ul>
+<h2 id="api-integration"><a class="header" href="#api-integration">API Integration</a></h2>
+<h3 id="1-chat-completion-api"><a class="header" href="#1-chat-completion-api">1. Chat Completion API</a></h3>
+<p>The engine provides OpenAI-compatible chat completion:</p>
+<pre><code class="language-python">def chat_completion(self, messages: List[Dict[str, str]], **kwargs) -&gt; Dict[str, Any]:
+    # Format messages using chat template
+    # Process through generation pipeline
+    # Return in OpenAI format
 </code></pre>
-<p>In Mini-YAIE, the loop logic is simplified for education, but the structure mirrors production engines.</p>
+<h3 id="2-streaming-support"><a class="header" href="#2-streaming-support">2. Streaming Support</a></h3>
+<p>The engine supports streaming responses for real-time applications:</p>
+<pre><code class="language-python">def chat_completion_stream(self, messages: List[Dict[str, str]], **kwargs):
+    # Generate tokens one by one
+    # Yield chunks immediately
+    # Maintain OpenAI stream format
+</code></pre>
+<h2 id="performance-optimization"><a class="header" href="#performance-optimization">Performance Optimization</a></h2>
+<h3 id="1-batch-size-management"><a class="header" href="#1-batch-size-management">1. Batch Size Management</a></h3>
+<p>The engine dynamically adjusts batch sizes based on available memory and request characteristics:</p>
+<ul>
+<li>Prefill batches: Optimized for prompt processing</li>
+<li>Decode batches: Optimized for token generation</li>
+<li>Mixed batches: Balanced between both phases</li>
+</ul>
+<h3 id="2-memory-management"><a class="header" href="#2-memory-management">2. Memory Management</a></h3>
+<p>The engine coordinates memory usage across components:</p>
+<pre><code class="language-python"># Connect scheduler to memory manager for optimization
+self.scheduler.connect_memory_manager(self.kv_cache_manager)
+</code></pre>
+<h3 id="3-computation-sharing"><a class="header" href="#3-computation-sharing">3. Computation Sharing</a></h3>
+<p>The engine maximizes computation sharing through radix attention:</p>
+<ul>
+<li>Shared prefix processing</li>
+<li>Common token computations</li>
+<li>Reduced redundant calculations</li>
+</ul>
+<h2 id="error-handling-and-resilience"><a class="header" href="#error-handling-and-resilience">Error Handling and Resilience</a></h2>
+<h3 id="1-request-validation"><a class="header" href="#1-request-validation">1. Request Validation</a></h3>
+<p>The engine validates requests before processing:</p>
+<ul>
+<li>Input format validation</li>
+<li>Parameter range checking</li>
+<li>Resource availability verification</li>
+</ul>
+<h3 id="2-graceful-degradation"><a class="header" href="#2-graceful-degradation">2. Graceful Degradation</a></h3>
+<p>When resources are constrained, the engine gracefully degrades:</p>
+<ul>
+<li>Reduced batch sizes</li>
+<li>Fallback mechanisms</li>
+<li>Proper error reporting</li>
+</ul>
+<h3 id="3-resource-management"><a class="header" href="#3-resource-management">3. Resource Management</a></h3>
+<p>The engine manages system resources effectively:</p>
+<ul>
+<li>GPU memory monitoring</li>
+<li>Request queue management</li>
+<li>Memory cleanup for completed requests</li>
+</ul>
+<h2 id="integration-points"><a class="header" href="#integration-points">Integration Points</a></h2>
+<h3 id="1-model-interface"><a class="header" href="#1-model-interface">1. Model Interface</a></h3>
+<p>The engine interfaces with any HuggingFace-compatible model:</p>
+<pre><code class="language-python">outputs = self.model(current_ids)  # Standard HuggingFace model interface
+</code></pre>
+<h3 id="2-sampling-integration"><a class="header" href="#2-sampling-integration">2. Sampling Integration</a></h3>
+<p>The engine uses the sampling kernel for token generation:</p>
+<pre><code class="language-python">sampling_kernel = SamplingKernel()
+next_token_id = sampling_kernel.sample(
+    next_token_logits,
+    temperature=request.temperature,
+    top_p=request.top_p
+)
+</code></pre>
+<h3 id="3-scheduler-integration"><a class="header" href="#3-scheduler-integration">3. Scheduler Integration</a></h3>
+<p>The engine coordinates closely with the scheduler:</p>
+<pre><code class="language-python"># Add requests to scheduler
+req_id = self.scheduler.add_request(prompt, **kwargs)
+# Process in generation loop
+responses = self._run_generation_loop(request_ids)
+</code></pre>
+<h2 id="engine-configuration"><a class="header" href="#engine-configuration">Engine Configuration</a></h2>
+<p>The engine supports various configuration options:</p>
+<ul>
+<li>Model selection and loading</li>
+<li>Batch size limits</li>
+<li>Memory allocation settings</li>
+<li>Performance optimization parameters</li>
+</ul>
+<h2 id="future-extensions"><a class="header" href="#future-extensions">Future Extensions</a></h2>
+<p>The engine design supports:</p>
+<ul>
+<li>Additional optimization techniques</li>
+<li>New attention mechanisms</li>
+<li>Enhanced scheduling algorithms</li>
+<li>Advanced memory management strategies</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../architecture/system_overview.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../architecture/configuration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -248,7 +407,7 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../architecture/system_overview.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../architecture/configuration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
